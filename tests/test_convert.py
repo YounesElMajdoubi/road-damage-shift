@@ -74,6 +74,14 @@ def test_end_to_end(raw_root, tmp_path, cfg):
             assert line.startswith("./") and (out / line[2:]).exists()
     assert (out / "data_eval_United_States.yaml").exists()
 
+    # Liste de contrôle "_pos" : uniquement les images de test avec >= 1 boîte.
+    def n_boxes(line):
+        return len((out / line[2:].replace("images/", "labels/", 1)).with_suffix(".txt").read_text().split("\n")) - 1
+
+    jp_test, jp_pos = _read_list(out, "list_test_Japan.txt"), _read_list(out, "list_test_Japan_pos.txt")
+    assert set(jp_pos) == {ln for ln in jp_test if n_boxes(ln) > 0} and len(jp_pos) < len(jp_test)
+    assert (out / "data_eval_Japan_pos.yaml").exists()
+
     info = json.loads((out / "dataset_info.json").read_text())
     assert len(info["manifest_sha256"]) == 64 and info["n_images"] == 135
 

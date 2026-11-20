@@ -10,6 +10,7 @@ Sortie (dans --out) :
     list_*.txt                      listes d'images par split (chemins relatifs "./images/...")
     data_source.yaml                train/val/test sources pour Ultralytics
     data_eval_<Pays>.yaml           évaluation sur le test d'un pays
+    data_eval_<Pays>_pos.yaml       idem, restreint aux images avec >= 1 boîte (contrôle inter-pays)
     manifest.csv                    une ligne par image (pays, split, tailles, nb de boîtes)
     stats.json                      comptes par pays/split/classe + boîtes ignorées
     dataset_info.json               config utilisée + empreinte sha256 du manifest
@@ -284,6 +285,9 @@ def run(cfg: dict, raw_root: Path, out_root: Path, overwrite: bool = False) -> d
         lists[f"source_{split}"] = _write_list(out_root, f"source_{split}", rs)
     for c in src_countries + tgt_countries:
         lists[f"test_{c}"] = _write_list(out_root, f"test_{c}", by[(c, "test")])
+        # Contrôle : sans images vides, pour comparer à un pays cible qui n'en a pas (ex. États-Unis).
+        pos = [r for r in by[(c, "test")] if r.n_boxes > 0]
+        lists[f"test_{c}_pos"] = _write_list(out_root, f"test_{c}_pos", pos)
     fewshot_cfg = cfg.get("fewshot") or {}
     for c in tgt_countries:
         pool = by[(c, "pool")]
@@ -297,6 +301,7 @@ def run(cfg: dict, raw_root: Path, out_root: Path, overwrite: bool = False) -> d
     _write_data_yaml(out_root, "source", lists["source_train"], lists["source_val"], lists["source_test"], classes)
     for c in src_countries + tgt_countries:
         _write_data_yaml(out_root, f"eval_{c}", lists["source_train"], lists[f"test_{c}"], None, classes)
+        _write_data_yaml(out_root, f"eval_{c}_pos", lists["source_train"], lists[f"test_{c}_pos"], None, classes)
 
     # --- manifest, stats, empreinte
     manifest = _manifest_csv(results, out_root, classes)
