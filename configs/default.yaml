@@ -1,0 +1,72 @@
+# road-damage-shift — configuration unique du projet.
+# Chaque section est lue par un module précis ; les sections marquées (S2), (S3)...
+# seront utilisées dans les semaines suivantes mais sont figées dès maintenant
+# pour que les choix de protocole soient décidés AVANT de voir les résultats.
+
+project:
+  name: road-damage-shift
+  seed: 42                      # seed global (découpage, sous-échantillonnage, entraînement)
+
+paths:
+  raw_root: data/raw/RDD2022    # dossier contenant les pays extraits (découverte automatique)
+  processed_root: data/processed/rdd2022_yolo
+
+data:
+  classes: [D00, D10, D20, D40] # ordre = index YOLO (0..3)
+  label_aliases: {}             # ex. {"D0w0": "D00"} si stats.json révèle une coquille
+  min_box_px: 2                 # boîte plus petite (en px, après clipping) → ignorée et comptée
+  max_side: 1280                # image plus grande → copie redimensionnée ; sinon lien symbolique
+  image_mode: symlink           # symlink | copy (pour les images non redimensionnées)
+  jpeg_quality: 95
+  workers: 8
+  countries:
+    # role: source = entraînement ; target = pays jamais vu (test + réserve few-shot)
+    # max_images: sous-échantillonnage (null = tout le pays)
+    Japan:         {role: source, max_images: 3000}
+    India:         {role: source, max_images: 3000}
+    Czech:         {role: source, max_images: null}   # ~2,8k images annotées
+    United_States: {role: target, max_images: 2500}
+    Norway:        {role: target, max_images: 2500, required: false}  # zip de 9,9 Go
+
+split:
+  # Découpage par blocs d'images consécutives (même trajet probable) pour limiter
+  # la fuite train/test entre images voisines. Ce n'est pas une garantie : les
+  # métadonnées GPS/séquence ne sont pas publiées.
+  block_size: 20
+  source: {train: 0.70, val: 0.15, test: 0.15}   # fractions (en nombre d'images)
+  target: {test: 1000, pool: rest}               # test figé ; pool = images annotables pour le few-shot
+  train_background_keep: 1.0    # fraction d'images sans dégât gardées dans le train source
+
+fewshot:                        # (S2) sous-ensembles imbriqués 50 ⊂ 200 ⊂ 500, tirés dans le pool
+  sizes: [50, 200, 500]
+  seeds: [0, 1, 2]              # 3 tirages → variance due au choix des images annotées
+
+train:
+  imgsz: 640
+  epochs: 50                    # identique pour les deux modèles
+  batch: 8                      # identique ; Ultralytics accumule jusqu'à nbs=64 de toute façon
+  patience: 0                   # 0 = pas d'early stopping (Ultralytics) → même budget pour tous
+  workers: 4
+  deterministic: true
+  amp: true
+  models:
+    yolo11s:  {weights: yolo11s.pt,  arch: yolo}
+    rtdetr_l: {weights: rtdetr-l.pt, arch: rtdetr}  # plus petit RT-DETR disponible dans Ultralytics
+
+mlflow:
+  experiment: road-damage-shift
+  tracking_uri: null            # null → sqlite local ; sinon URI distante (ex. DagsHub)
+
+eval:
+  conf_map: 0.001               # seuil bas pour la mAP (standard)
+  iou_match: 0.5                # appariement pour F1 (protocole CRDDC)
+  bootstrap: {n_resamples: 1000, ci: 0.95}   # (S1-fin) IC par rééchantillonnage d'images
+
+blur:                           # (S3)
+  kernel_lengths: [0, 9, 15, 21, 31]   # longueur du flou de bougé linéaire, en px
+  angles_deg: [0, 45, 90]
+
+deploy:                         # (S3)
+  onnx_opset: 17
+  latency_runs: 200
+  latency_warmup: 20

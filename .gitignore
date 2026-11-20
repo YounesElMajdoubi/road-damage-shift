@@ -1,0 +1,19 @@
+# données et sorties d'entraînement (jamais versionnées)
+data/raw/
+data/processed/
+runs/
+mlruns/
+mlartifacts/
+mlflow.db
+*.pt
+*.onnx
+*.engine
+*.zip
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.ipynb_checkpoints/
