@@ -13,7 +13,7 @@ paths:
 
 data:
   classes: [D00, D10, D20, D40] # ordre = index YOLO (0..3)
-  label_aliases: {}             # ex. {"D0w0": "D00"} si stats.json révèle une coquille
+  label_aliases: {D0w0: D00}  # 1 boîte India/train, coquille détectée par stats.json             # ex. {"D0w0": "D00"} si stats.json révèle une coquille
   min_box_px: 2                 # boîte plus petite (en px, après clipping) → ignorée et comptée
   max_side: 1280                # image plus grande → copie redimensionnée ; sinon lien symbolique
   image_mode: symlink           # symlink | copy (pour les images non redimensionnées)
