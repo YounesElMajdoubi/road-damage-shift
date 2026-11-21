@@ -18,6 +18,7 @@ Détection de dégradations de chaussée (fissures longitudinales D00, transvers
 - **Sources** : Japon + Inde + Tchéquie (70 / 15 / 15 %). **Cibles** : États-Unis (principale), Norvège (si disponible) — 1000 images de test figées + une réserve pour le few-shot.
 - **Découpage par blocs** d'images consécutives pour limiter la fuite entre images voisines d'un même trajet.
 - **Sélection de modèle** sur la validation source uniquement ; les jeux de test ne servent qu'à la mesure finale.
+- **Même budget pour les deux modèles** (données, 50 epochs, batch 8, imgsz 640, seed), mais chacun avec le taux d'apprentissage de sa recette d'origine : YOLO11 en `optimizer: auto` d'Ultralytics (AdamW 0,00125), RT-DETR en AdamW 1e-4 (Zhao et al., CVPR 2024). Avec la recette YOLO, l'entraînement de RT-DETR a divergé (NaN persistant).
 - Seeds fixées, empreinte sha256 du manifest de données enregistrée dans chaque run MLflow.
 
 ## Résultats (baselines, test source)

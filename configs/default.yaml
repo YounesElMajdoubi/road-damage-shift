@@ -51,7 +51,11 @@ train:
   amp: true
   models:
     yolo11s:  {weights: yolo11s.pt,  arch: yolo}
-    rtdetr_l: {weights: rtdetr-l.pt, arch: rtdetr}  # plus petit RT-DETR disponible dans Ultralytics
+    # Taux d'apprentissage : recette d'origine de chaque architecture.
+    # YOLO11 : "auto" d'Ultralytics (AdamW, lr = 0.002*5/(4+nc) = 0.00125 pour 4 classes).
+    # RT-DETR : AdamW lr 1e-4 (Zhao et al., CVPR 2024). Avec "auto" (0.00125) + AMP, l'entraînement
+    # complet a divergé (NaN persistant, run interrompu) : la recette YOLO n'est pas adaptée à RT-DETR.
+    rtdetr_l: {weights: rtdetr-l.pt, arch: rtdetr, optimizer: AdamW, lr0: 0.0001}  # plus petit RT-DETR d'Ultralytics
 
 mlflow:
   experiment: road-damage-shift

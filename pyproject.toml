@@ -10,10 +10,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-only" }
 # Dépendances minimales : la conversion et les tests tournent sans GPU ni Ultralytics.
-dependencies = ["pillow>=10", "pyyaml>=6"]
+dependencies = ["pillow>=10", "pyyaml>=6", "numpy>=1.24"]
 
 [project.optional-dependencies]
-train = ["ultralytics", "mlflow", "pandas", "numpy"]
+train = ["ultralytics", "mlflow", "pandas"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
