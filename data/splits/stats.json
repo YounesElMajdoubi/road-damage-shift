@@ -1,0 +1,205 @@
+{
+  "per_country_split": {
+    "Czech/test": {
+      "images": 420,
+      "background_images": 265,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 136,
+        "D10": 45,
+        "D20": 26,
+        "D40": 26
+      }
+    },
+    "Czech/train": {
+      "images": 1980,
+      "background_images": 1234,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 694,
+        "D10": 272,
+        "D20": 110,
+        "D40": 137
+      }
+    },
+    "Czech/val": {
+      "images": 429,
+      "background_images": 258,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 158,
+        "D10": 82,
+        "D20": 25,
+        "D40": 34
+      }
+    },
+    "India/test": {
+      "images": 440,
+      "background_images": 251,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 90,
+        "D10": 2,
+        "D20": 111,
+        "D40": 189
+      }
+    },
+    "India/train": {
+      "images": 2100,
+      "background_images": 1250,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 406,
+        "D10": 21,
+        "D20": 533,
+        "D40": 778
+      }
+    },
+    "India/val": {
+      "images": 460,
+      "background_images": 270,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 88,
+        "D10": 5,
+        "D20": 116,
+        "D40": 204
+      }
+    },
+    "Japan/test": {
+      "images": 440,
+      "background_images": 105,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 192,
+        "D10": 176,
+        "D20": 264,
+        "D40": 103
+      }
+    },
+    "Japan/train": {
+      "images": 2100,
+      "background_images": 558,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 765,
+        "D10": 795,
+        "D20": 1167,
+        "D40": 444
+      }
+    },
+    "Japan/val": {
+      "images": 460,
+      "background_images": 86,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 154,
+        "D10": 192,
+        "D20": 313,
+        "D40": 104
+      }
+    },
+    "United_States/pool": {
+      "images": 1495,
+      "background_images": 0,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 2108,
+        "D10": 986,
+        "D20": 257,
+        "D40": 40
+      }
+    },
+    "United_States/test": {
+      "images": 1005,
+      "background_images": 0,
+      "resized_images": 0,
+      "boxes": {
+        "D00": 1406,
+        "D10": 738,
+        "D20": 166,
+        "D40": 23
+      }
+    }
+  },
+  "dropped_boxes": {
+    "Czech/test": {},
+    "Czech/train": {},
+    "Czech/val": {},
+    "India/test": {},
+    "India/train": {},
+    "India/val": {},
+    "Japan/test": {},
+    "Japan/train": {},
+    "Japan/val": {},
+    "United_States/pool": {},
+    "United_States/test": {}
+  },
+  "unknown_labels": {
+    "Czech/test": {},
+    "Czech/train": {},
+    "Czech/val": {},
+    "India/test": {
+      "D01": 6,
+      "D44": 39,
+      "D43": 4,
+      "D50": 2,
+      "D11": 3
+    },
+    "India/train": {
+      "D44": 280,
+      "D01": 51,
+      "D11": 17,
+      "D43": 13,
+      "D50": 9
+    },
+    "India/val": {
+      "D44": 65,
+      "D01": 9,
+      "D50": 2,
+      "D43": 5,
+      "D11": 1
+    },
+    "Japan/test": {
+      "D50": 165,
+      "D44": 171,
+      "D43": 36
+    },
+    "Japan/train": {
+      "D50": 733,
+      "D44": 779,
+      "D43": 158
+    },
+    "Japan/val": {
+      "D44": 174,
+      "D50": 168,
+      "D43": 33
+    },
+    "United_States/pool": {},
+    "United_States/test": {}
+  },
+  "missing_images": {},
+  "lists": {
+    "source_train": 6180,
+    "source_val": 1349,
+    "source_test": 1300,
+    "test_Czech": 420,
+    "test_Czech_pos": 155,
+    "test_India": 440,
+    "test_India_pos": 189,
+    "test_Japan": 440,
+    "test_Japan_pos": 335,
+    "test_United_States": 1005,
+    "test_United_States_pos": 1005,
+    "pool_United_States": 1495,
+    "fewshot_United_States_k50_s0": 50,
+    "fewshot_United_States_k200_s0": 200,
+    "fewshot_United_States_k500_s0": 500,
+    "fewshot_United_States_k50_s1": 50,
+    "fewshot_United_States_k200_s1": 200,
+    "fewshot_United_States_k500_s1": 500,
+    "fewshot_United_States_k50_s2": 50,
+    "fewshot_United_States_k200_s2": 200,
+    "fewshot_United_States_k500_s2": 500
+  }
+}

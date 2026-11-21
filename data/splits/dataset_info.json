@@ -1,0 +1,76 @@
+{
+  "manifest_sha256": "aff1da5af0e1c61885e4a59ddc058d8f659638117f99ab5d1f5df525cc57e2da",
+  "n_images": 11329,
+  "raw_root": "/tmp/rdd_raw",
+  "created_utc": "2026-11-21T02:40:59+00:00",
+  "config": {
+    "project": {
+      "name": "road-damage-shift",
+      "seed": 42
+    },
+    "data": {
+      "classes": [
+        "D00",
+        "D10",
+        "D20",
+        "D40"
+      ],
+      "label_aliases": {
+        "D0w0": "D00"
+      },
+      "min_box_px": 2,
+      "max_side": 1280,
+      "image_mode": "symlink",
+      "jpeg_quality": 95,
+      "workers": 8,
+      "countries": {
+        "Japan": {
+          "role": "source",
+          "max_images": 3000
+        },
+        "India": {
+          "role": "source",
+          "max_images": 3000
+        },
+        "Czech": {
+          "role": "source",
+          "max_images": null
+        },
+        "United_States": {
+          "role": "target",
+          "max_images": 2500
+        },
+        "Norway": {
+          "role": "target",
+          "max_images": 2500,
+          "required": false
+        }
+      }
+    },
+    "split": {
+      "block_size": 20,
+      "source": {
+        "train": 0.7,
+        "val": 0.15,
+        "test": 0.15
+      },
+      "target": {
+        "test": 1000,
+        "pool": "rest"
+      },
+      "train_background_keep": 1.0
+    },
+    "fewshot": {
+      "sizes": [
+        50,
+        200,
+        500
+      ],
+      "seeds": [
+        0,
+        1,
+        2
+      ]
+    }
+  }
+}
