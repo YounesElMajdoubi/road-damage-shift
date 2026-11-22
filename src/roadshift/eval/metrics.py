@@ -225,3 +225,18 @@ def paired_bootstrap_diff(
         d.append(compute(a, conf_a, w)[metric] - compute(b, conf_b, w)[metric])
     point = compute(a, conf_a)[metric] - compute(b, conf_b)[metric]
     return point, float(np.quantile(d, 0.025)), float(np.quantile(d, 0.975))
+
+
+def unpaired_bootstrap_diff(
+    a: DetectionTable, b: DetectionTable, conf: float, metric: str = "mAP50", n: int = 1000, seed: int = 0
+):
+    """IC de la différence a - b pour un MÊME modèle évalué sur deux jeux d'images distincts
+    (ex. pays cible - test source) : rééchantillonnages indépendants des deux jeux."""
+    rng = np.random.default_rng(seed)
+    d = []
+    for _ in range(n):
+        wa = np.bincount(rng.integers(0, len(a.stems), len(a.stems)), minlength=len(a.stems)).astype(float)
+        wb = np.bincount(rng.integers(0, len(b.stems), len(b.stems)), minlength=len(b.stems)).astype(float)
+        d.append(compute(a, conf, wa)[metric] - compute(b, conf, wb)[metric])
+    point = compute(a, conf)[metric] - compute(b, conf)[metric]
+    return point, float(np.nanquantile(d, 0.025)), float(np.nanquantile(d, 0.975))

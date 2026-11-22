@@ -171,3 +171,45 @@ def test_report_end_to_end(raw_root, tmp_path, cfg):
     assert {r["eval"] for r in rows} >= {"source_val", "source_test", "test_United_States", "test_Japan_pos"}
     for r in rows:
         assert float(r["mAP50"]) == pytest.approx(1.0) and float(r["F1"]) == pytest.approx(1.0)
+
+
+def test_unpaired_diff_same_table_brackets_zero():
+    from roadshift.eval.metrics import unpaired_bootstrap_diff
+
+    t = _random_table()
+    p, lo, hi = unpaired_bootstrap_diff(t, t, 0.3, n=200)
+    assert p == 0.0 and lo < 0 < hi  # tirages indépendants : IC autour de 0, non nul
+
+
+def test_compare_cli_oracle_vs_oracle(raw_root, tmp_path, cfg):
+    """Deux modèles « oracles » identiques : aucune différence significative entre eux."""
+    import csv as _csv
+
+    from roadshift.data.convert import run
+    from roadshift.eval.compare import main
+
+    data = tmp_path / "data"
+    run(cfg, raw_root, data)
+    sizes = load_sizes(data / "manifest.csv")
+    runs = {}
+    for name in ("a", "b"):
+        runs[name] = tmp_path / name
+        for tag in ("source_val", "source_test", "test_Japan", "test_United_States"):
+            preds = []
+            for line in (data / f"list_{tag}.txt").read_text().split():
+                stem = line.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                w, h = sizes[stem]
+                for lab in (data / "labels" / stem.rsplit("_", 1)[0] / f"{stem}.txt").read_text().split("\n"):
+                    if lab:
+                        c, cx, cy, bw, bh = map(float, lab.split())
+                        box = [(cx - bw / 2) * w, (cy - bh / 2) * h, bw * w, bh * h]
+                        preds.append({"image_id": stem, "category_id": int(c) + 1, "bbox": box, "score": 0.9})
+            (runs[name] / f"eval_{tag}").mkdir(parents=True)
+            (runs[name] / f"eval_{tag}" / "predictions.json").write_text(json.dumps(preds))
+    out = tmp_path / "cmp.csv"
+    main([f"--run=a={runs['a']}", f"--run=b={runs['b']}", "--data", str(data), "--tags", "source_test",
+          "test_Japan", "--out", str(out), "--n-boot", "50"])  # fmt: skip
+    rows = list(_csv.DictReader(out.read_text().splitlines()))
+    paired = [r for r in rows if r["comparison"] == "model_paired"]
+    assert paired and all(float(r["diff"]) == 0.0 and r["significant"] == "False" for r in paired)
+    assert {r["a"] for r in rows if r["comparison"] == "target_minus_source"} == {"a", "b"}

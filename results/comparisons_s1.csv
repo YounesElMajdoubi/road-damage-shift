@@ -1,0 +1,15 @@
+comparison,eval,metric,a,b,diff,lo,hi,significant
+model_paired,source_test,mAP50,yolo11s,rtdetr_l,0.015,-0.0118,0.0405,False
+model_paired,source_test,F1,yolo11s,rtdetr_l,-0.0022,-0.0262,0.0197,False
+model_paired,test_Japan,mAP50,yolo11s,rtdetr_l,0.007,-0.0286,0.0451,False
+model_paired,test_Japan,F1,yolo11s,rtdetr_l,0.0021,-0.029,0.0331,False
+model_paired,test_India,mAP50,yolo11s,rtdetr_l,0.1107,-0.1368,0.2666,False
+model_paired,test_India,F1,yolo11s,rtdetr_l,-0.0064,-0.0477,0.0389,False
+model_paired,test_Czech,mAP50,yolo11s,rtdetr_l,-0.0151,-0.0702,0.0428,False
+model_paired,test_Czech,F1,yolo11s,rtdetr_l,-0.0117,-0.0739,0.0442,False
+model_paired,test_United_States,mAP50,yolo11s,rtdetr_l,0.0996,0.0583,0.1433,True
+model_paired,test_United_States,F1,yolo11s,rtdetr_l,0.0811,0.0622,0.1001,True
+target_minus_source,test_United_States - source_test,mAP50,yolo11s,yolo11s,0.0441,-0.0116,0.108,False
+target_minus_source,test_United_States - source_test,F1,yolo11s,yolo11s,0.0688,0.0401,0.0981,True
+target_minus_source,test_United_States - source_test,mAP50,rtdetr_l,rtdetr_l,-0.0405,-0.0924,0.0183,False
+target_minus_source,test_United_States - source_test,F1,rtdetr_l,rtdetr_l,-0.0146,-0.0427,0.0161,False
