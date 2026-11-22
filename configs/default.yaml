@@ -47,6 +47,9 @@ fewshot:                        # (S2) sous-ensembles imbriqués 50 ⊂ 200 ⊂ 
   epochs: 30                    # identique pour tous les k ; on évalue last.pt (pas de validation cible pour choisir)
   lr_scale: 0.1                 # lr de fine-tuning = lr d'entraînement S1 / 10 (choix a priori, standard en fine-tuning)
   warmup_bias_lr: 0.0           # défaut Ultralytics 0.1 : trop fort pour repartir d'un modèle déjà entraîné
+  nbs: 8                        # = batch : une mise à jour par batch. Avec le défaut (nbs 64, accumulation x8), k=50
+                                # ne recevait qu'≈36 mises à jour en 30 epochs (vu dans les logs du smoke, avant tout
+                                # résultat few-shot) ; la courbe aurait mesuré ce réglage plutôt que le nombre d'images.
   train_seed: 42                # seed d'entraînement fixe : la variance mesurée vient du choix des images
   evals: [source_val, source_test, test_United_States]  # seuil F1 (val source), oubli (test source), cible
   annotation_cost:              # modèle publié, PAS une mesure : Su et al. 2012 (ImageNet) ; Papadopoulos et al., ICCV 2017
