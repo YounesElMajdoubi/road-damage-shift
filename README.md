@@ -8,7 +8,7 @@ Détection de dégradations de chaussée (fissures longitudinales D00, transvers
 
 | # | Question | Coût réel associé |
 |---|----------|-------------------|
-| Q1 | Combien d'images annotées du pays cible faut-il pour récupérer la performance ? (0 / 50 / 200 / 500) | Temps d'annotation mesuré : [X] min pour 50 images |
+| Q1 | Combien d'images annotées du pays cible faut-il pour récupérer la performance ? (0 / 50 / 200 / 500) | Coût **estimé** (modèle publié, non mesuré) : [X]–[X] h pour 500 images |
 | Q2 | Le flou de bougé : défloutage Wiener avant détection ou augmentation par flou à l'entraînement ? | — |
 | Q3 | Quelle perte de précision pour quel gain de latence en ONNX / INT8 sur CPU ? | Latence CPU : [X] ms/image |
 
@@ -20,6 +20,14 @@ Détection de dégradations de chaussée (fissures longitudinales D00, transvers
 - **Sélection de modèle** sur la validation source uniquement ; les jeux de test ne servent qu'à la mesure finale.
 - **Même budget pour les deux modèles** (données, 50 epochs, batch 8, imgsz 640, seed), mais chacun avec le taux d'apprentissage de sa recette d'origine : YOLO11 en `optimizer: auto` d'Ultralytics (AdamW 0,00125), RT-DETR en AdamW 1e-4 (Zhao et al., CVPR 2024). Avec la recette YOLO, l'entraînement de RT-DETR a divergé (NaN persistant).
 - Seeds fixées, empreinte sha256 du manifest de données enregistrée dans chaque run MLflow.
+
+### Protocole Q1 (fixé avant les résultats few-shot)
+
+- Fine-tuning du modèle S1 sur k = 50 / 200 / 500 images américaines (3 tirages imbriqués chacun) et sur toute la réserve (plafond) ; k = 0 = modèle S1 seul.
+- 30 epochs pour tous les k, lr = lr S1 / 10 (AdamW), seed d'entraînement fixe : la variance mesurée vient du choix des images.
+- Aucune image cible en dehors des k annotées n'est utilisée : pas de validation cible, on évalue `last.pt`. Seuil du F1 choisi sur la validation source.
+- Mesures avec IC bootstrap : test États-Unis figé (adaptation) et test source (oubli).
+- **Coût d'annotation estimé, pas mesuré** : 7,8 s par image + 7 à 34,5 s par boîte (Su et al. 2012 ; Papadopoulos et al., ICCV 2017), appliqués aux nombres exacts d'images et de boîtes de chaque sous-ensemble. Ces temps viennent d'objets ImageNet bien délimités ; une fissure fine ou un faïençage est probablement plus long à annoter, la borne haute est donc la plus réaliste.
 
 ## Résultats (baselines, test source)
 
