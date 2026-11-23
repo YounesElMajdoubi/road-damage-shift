@@ -7,6 +7,7 @@ aux nombres exacts d'images et de boîtes de chaque sous-ensemble, pour donner u
 from __future__ import annotations
 
 import math
+import random
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,12 +37,34 @@ def plan_runs(fewshot_cfg: dict, pool_size: int) -> list[FewShotRun]:
     return runs
 
 
-def write_fewshot_yaml(data_root: Path, run: FewShotRun, classes: list[str]) -> Path:
-    """Data YAML Ultralytics : train = k images cibles ; val = validation SOURCE (aucune image cible en plus)."""
+def write_replay_list(data_root: Path, run: FewShotRun, ratio: float, seed: int) -> tuple[str, int]:
+    """Liste d'entraînement S2b : les k images cibles + round(ratio * k) images du TRAIN source (tirage seedé).
+
+    Retourne (nom de la liste écrite, nombre d'images sources ajoutées).
+    """
+    if run.list_name is None:
+        raise ValueError("k=0 : pas d'entraînement, donc pas de liste de rejeu")
+    root = Path(data_root)
+    target = root.joinpath(run.list_name).read_text().split()
+    source = sorted(root.joinpath("list_source_train.txt").read_text().split())
+    n = round(ratio * len(target))
+    if n > len(source):
+        raise ValueError(f"rejeu de {n} images demandé, {len(source)} disponibles dans le train source")
+    replay = sorted(random.Random(seed).sample(source, n))
+    name = f"list_replay_{run.name}.txt"
+    root.joinpath(name).write_text("\n".join(target + replay) + "\n", encoding="utf-8", newline="\n")
+    return name, n
+
+
+def write_fewshot_yaml(data_root: Path, run: FewShotRun, classes: list[str], train_list: str | None = None) -> Path:
+    """Data YAML Ultralytics : train = k images cibles (ou `train_list`, ex. liste de rejeu) ;
+    val = validation SOURCE (aucune image cible en plus)."""
     if run.list_name is None:
         raise ValueError("k=0 : pas d'entraînement, donc pas de YAML")
-    d = {"train": run.list_name, "val": "list_source_val.txt", "names": dict(enumerate(classes))}
-    path = Path(data_root) / f"data_fewshot_{run.name}.yaml"
+    train = train_list or run.list_name
+    d = {"train": train, "val": "list_source_val.txt", "names": dict(enumerate(classes))}
+    suffix = "_replay" if train_list else ""
+    path = Path(data_root) / f"data_fewshot_{run.name}{suffix}.yaml"
     path.write_text(yaml.safe_dump(d, sort_keys=False), encoding="utf-8", newline="\n")
     return path
 

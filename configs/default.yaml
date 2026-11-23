@@ -52,6 +52,9 @@ fewshot:                        # (S2) sous-ensembles imbriqués 50 ⊂ 200 ⊂ 
                                 # résultat few-shot) ; la courbe aurait mesuré ce réglage plutôt que le nombre d'images.
   train_seed: 42                # seed d'entraînement fixe : la variance mesurée vient du choix des images
   evals: [source_val, source_test, test_United_States]  # seuil F1 (val source), oubli (test source), cible
+  # S2b (rejeu), fixé après S2 et AVANT tout résultat avec rejeu : seule différence avec S2, l'ajout d'images
+  # sources tirées dans le train source (jamais val/test), ratio 1:1 avec les k images cibles, même tirage.
+  replay_ratio: 1.0
   annotation_cost:              # modèle publié, PAS une mesure : Su et al. 2012 (ImageNet) ; Papadopoulos et al., ICCV 2017
     s_per_image: 7.8            # vérifier qu'il ne reste aucun objet à annoter dans l'image
     s_per_box_high: 34.5        # tracé classique d'une boîte (25,5 s) + contrôle qualité (9,0 s)

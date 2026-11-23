@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SERIES = {"yolo11s": "#2a78d6", "rtdetr_l": "#eb6834"}  # palette catégorielle validée (ordre fixe)
+PALETTE = ["#2a78d6", "#eb6834"]  # palette catégorielle validée (ordre fixe, jamais recyclée)
+SERIES = {"yolo11s": PALETTE[0], "rtdetr_l": PALETTE[1]}
 LABELS = {"yolo11s": "YOLO11s", "rtdetr_l": "RT-DETR-l"}
 INK, INK2, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 
@@ -30,9 +31,11 @@ def plot_curve(
     out_png: str | Path,
     metric: str = "mAP50",
     full_k: int | None = None,
+    series: dict[str, tuple[str, str]] | None = None,
 ) -> Path:
     """curve : sortie de aggregate_curve ; runs : lignes par run (pour les points de chaque tirage) ;
-    cost : k -> (heures basse, haute) ; panels : [(eval_tag, titre)]."""
+    cost : k -> (heures basse, haute) ; panels : [(eval_tag, titre)] ;
+    series : valeur du champ « model » -> (libellé, couleur), dans l'ordre d'affichage (défaut : les modèles)."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -40,7 +43,8 @@ def plot_curve(
 
     ks = sorted({int(r["k"]) for r in curve})
     pos = {k: i for i, k in enumerate(ks)}
-    models = [m for m in SERIES if any(r["model"] == m for r in curve)]
+    series = series or {m: (LABELS[m], c) for m, c in SERIES.items()}
+    models = [m for m in series if any(r["model"] == m for r in curve)]
     fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.2), sharey=False, facecolor=SURFACE)
     axes = [axes] if len(panels) == 1 else list(axes)
     for ax, (tag, title) in zip(axes, panels, strict=True):
@@ -54,13 +58,14 @@ def plot_curve(
             y = [r[metric] for r in pts]
             lo = [r[metric] - r[f"{metric}_boot_lo"] for r in pts]
             hi = [r[f"{metric}_boot_hi"] - r[metric] for r in pts]
-            c = SERIES[m]
+            c = series[m][1]
             ax.errorbar(x, y, yerr=[lo, hi], color=c, lw=2, marker="o", ms=8, capsize=0, elinewidth=1.5,
-                        markeredgecolor=SURFACE, markeredgewidth=2, label=LABELS.get(m, m), zorder=3)  # fmt: skip
+                        markeredgecolor=SURFACE, markeredgewidth=2, label=series[m][0], zorder=3)  # fmt: skip
             seeds = [r for r in runs if r["model"] == m and r["eval"] == tag and r.get("seed") not in (None, "", "nan")]
             ax.scatter([pos[int(r["k"])] + dx + 0.12 for r in seeds], [float(r[metric]) for r in seeds],
                        s=14, color=c, alpha=0.55, linewidths=0, zorder=2)  # fmt: skip
-            ax.annotate(f"{y[-1]:.3f}", (x[-1], y[-1]), xytext=(8, 0), textcoords="offset points",
+            dy = (j - (len(models) - 1) / 2) * -13  # une étiquette par série, décalées pour ne pas se chevaucher
+            ax.annotate(f"{y[-1]:.3f}", (x[-1], y[-1]), xytext=(10, dy), textcoords="offset points",
                         va="center", fontsize=9, color=INK)  # fmt: skip
         ax.set_title(title, loc="left", fontsize=11, color=INK)
         ax.set_xticks(range(len(ks)), _xlabels(ks, cost, full_k), fontsize=8, color=INK2)
@@ -77,9 +82,52 @@ def plot_curve(
     if len(models) >= 2:  # une seule série : pas de légende, le titre de la figure la nomme
         axes[0].legend(frameon=False, fontsize=9, loc="lower right", labelcolor=INK)
     elif models:
-        fig.suptitle(LABELS.get(models[0], models[0]), x=0.01, ha="left", fontsize=10, color=INK2)
+        fig.suptitle(series[models[0]][0], x=0.01, ha="left", fontsize=10, color=INK2)
     fig.tight_layout()
     out = Path(out_png)
     fig.savefig(out, dpi=160, facecolor=SURFACE)
     plt.close(fig)
     return out
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Superpose plusieurs séries de runs few-shot (ex. cible seule et rejeu) sur une même figure.
+
+    python -m roadshift.fewshot.plot --runs "Cible seule=results/fewshot_runs.csv" \
+        --runs "Rejeu 1:1=results/fewshot_runs_replay.csv" --cost results/fewshot_cost.csv \
+        --out results/fewshot_curve_replay.png
+    """
+    import argparse
+    import csv
+
+    from roadshift.fewshot.plan import aggregate_curve
+
+    ap = argparse.ArgumentParser(description=main.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--runs", action="append", required=True, help="libellé=fewshot_runs.csv (répéter, 2 max)")
+    ap.add_argument("--cost", required=True, type=Path)
+    ap.add_argument("--target", default="test_United_States")
+    ap.add_argument("--out", required=True, type=Path)
+    args = ap.parse_args(argv)
+    if len(args.runs) > len(PALETTE):
+        raise SystemExit(f"{len(PALETTE)} séries au plus (palette validée)")
+    rows, series = [], {}
+    for i, spec in enumerate(args.runs):
+        label, path = spec.split("=", 1)
+        series[label] = (label, PALETTE[i])
+        for r in csv.DictReader(Path(path).read_text().splitlines()):
+            r["model"], r["k"] = label, int(r["k"])
+            r["seed"] = None if r.get("seed") in ("", "nan", "None", None) else r["seed"]
+            rows.append(r)
+    cost_rows = list(csv.DictReader(args.cost.read_text().splitlines()))
+    ks = sorted({int(r["k"]) for r in cost_rows})
+    cost = {}
+    for k in ks:  # coût moyen sur les tirages de même k
+        sub = [r for r in cost_rows if int(r["k"]) == k]
+        cost[k] = tuple(sum(float(r[c]) for r in sub) / len(sub) for c in ("h_low", "h_high"))
+    plot_curve(aggregate_curve(rows), rows, cost, [(args.target, "Pays cible (États-Unis)"),
+               ("source_test", "Oubli : test des pays sources")], args.out, full_k=max(ks), series=series)  # fmt: skip
+    print(args.out)
+
+
+if __name__ == "__main__":
+    main()

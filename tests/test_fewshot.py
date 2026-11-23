@@ -94,15 +94,69 @@ def test_plot_curve_writes_png(tmp_path):
     assert out.exists() and out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_gains_vs_k0_identical_runs_are_zero():
+def test_paired_gains_and_pairing():
     from roadshift.eval.metrics import match
-    from roadshift.fewshot.gains import gains_vs_k0
+    from roadshift.fewshot.gains import paired_gains, pairs_vs_k0, pairs_vs_reference
 
     gt = {"a": (np.array([0]), np.array([[0, 0, 10, 10.0]])), "b": (np.array([1]), np.array([[5, 5, 20, 20.0]]))}
     pr = {s: (g[0], g[1], np.array([0.9])) for s, g in gt.items()}
     t = match(["a", "b"], gt, pr, 4)
-    runs = {"k0": {"k": 0, "seed": None}, "k50_s0": {"k": 50, "seed": 0}}
-    tables = {(n, "test"): t for n in runs}
-    rows = gains_vs_k0(runs, tables, {"k0": 0.5, "k50_s0": 0.5}, ["test"], n_boot=50)
+    runs = {"k0": {"k": 0, "seed": None}, "k50_s1": {"k": 50, "seed": 1}, "k50_s0": {"k": 50, "seed": 0}}
+    assert pairs_vs_k0(runs) == [("k50_s0", "k0"), ("k50_s1", "k0")]
+    ref = {"ref:k0": {"k": 0, "seed": None}, "ref:x": {"k": 50, "seed": 0}, "ref:y": {"k": 50, "seed": 1}}
+    assert pairs_vs_reference(runs, ref) == [("k50_s0", "ref:x"), ("k50_s1", "ref:y")]
+    with pytest.raises(KeyError):
+        pairs_vs_reference({"k9": {"k": 9, "seed": 0}}, ref)
+    allr = {**runs, **ref}
+    rows = paired_gains(
+        [("k50_s0", "k0")], allr, {(n, "test"): t for n in allr}, dict.fromkeys(allr, 0.5), ["test"], 50
+    )
     assert [r["metric"] for r in rows] == ["mAP50", "F1"]
-    assert all(r["gain_vs_k0"] == 0 and not r["significant"] and r["run"] == "k50_s0" for r in rows)
+    assert all(r["gain"] == 0 and not r["significant"] and r["reference"] == "k0" for r in rows)
+
+
+def test_replay_list(raw_root, tmp_path, cfg):
+    from roadshift.fewshot.plan import write_replay_list
+
+    data = tmp_path / "data"
+    run(cfg, raw_root, data)
+    r = FewShotRun("United_States_k5_s0", 5, 0, "list_fewshot_United_States_k5_s0.txt")
+    name, n = write_replay_list(data, r, ratio=1.0, seed=0)
+    lines = (data / name).read_text().split()
+    target = (data / r.list_name).read_text().split()
+    source_train = set((data / "list_source_train.txt").read_text().split())
+    assert n == 5 and len(lines) == 10 and lines[:5] == target
+    assert set(lines[5:]) <= source_train  # jamais val/test source
+    assert write_replay_list(data, r, 1.0, 0)[0] == name and (data / name).read_text().split() == lines  # seedé
+    write_replay_list(data, r, 1.0, seed=1)
+    assert (data / name).read_text().split()[5:] != lines[5:]  # autre seed : autres images sources
+    y = yaml.safe_load(write_fewshot_yaml(data, r, cfg["data"]["classes"], train_list=name).read_text())
+    assert y["train"] == name and y["val"] == "list_source_val.txt"
+    with pytest.raises(ValueError):
+        write_replay_list(data, r, ratio=1000.0, seed=0)
+
+
+def test_plot_overlay_cli(tmp_path):
+    pytest.importorskip("matplotlib")
+    import csv as _csv
+
+    from roadshift.fewshot.plot import main
+
+    fields = ["model", "eval", "k", "seed", "mAP50", "mAP50_lo", "mAP50_hi"]
+    for name, v in (("a", 0.4), ("b", 0.45)):
+        with open(tmp_path / f"{name}.csv", "w", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            for ev in ("test_United_States", "source_test"):
+                for k, s in [(0, ""), (50, 0), (50, 1), (100, "")]:
+                    w.writerow({"model": "yolo11s", "eval": ev, "k": k, "seed": s, "mAP50": v, "mAP50_lo": v - 0.05,
+                                "mAP50_hi": v + 0.05})  # fmt: skip
+    (tmp_path / "cost.csv").write_text(
+        "run,k,seed,h_low,h_high\nk0,0,,0,0\nk50a,50,0,0.3,1.0\nk50b,50,1,0.4,1.2\nf,100,,1,3\n"
+    )
+    out = tmp_path / "o.png"
+    a, b, c = tmp_path / "a.csv", tmp_path / "b.csv", tmp_path / "cost.csv"
+    main(["--runs", f"A={a}", "--runs", f"B={b}", "--cost", str(c), "--out", str(out)])
+    assert out.read_bytes()[:4] == b"\x89PNG"
+    with pytest.raises(SystemExit):
+        main(["--runs", "A=x", "--runs", "B=x", "--runs", "C=x", "--cost", "c", "--out", str(out)])
