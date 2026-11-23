@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 import yaml
 
@@ -91,3 +92,17 @@ def test_plot_curve_writes_png(tmp_path):
         [("test_United_States", "cible"), ("source_test", "oubli")], tmp_path / "c.png", full_k=100,
     )  # fmt: skip
     assert out.exists() and out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_gains_vs_k0_identical_runs_are_zero():
+    from roadshift.eval.metrics import match
+    from roadshift.fewshot.gains import gains_vs_k0
+
+    gt = {"a": (np.array([0]), np.array([[0, 0, 10, 10.0]])), "b": (np.array([1]), np.array([[5, 5, 20, 20.0]]))}
+    pr = {s: (g[0], g[1], np.array([0.9])) for s, g in gt.items()}
+    t = match(["a", "b"], gt, pr, 4)
+    runs = {"k0": {"k": 0, "seed": None}, "k50_s0": {"k": 50, "seed": 0}}
+    tables = {(n, "test"): t for n in runs}
+    rows = gains_vs_k0(runs, tables, {"k0": 0.5, "k50_s0": 0.5}, ["test"], n_boot=50)
+    assert [r["metric"] for r in rows] == ["mAP50", "F1"]
+    assert all(r["gain_vs_k0"] == 0 and not r["significant"] and r["run"] == "k50_s0" for r in rows)

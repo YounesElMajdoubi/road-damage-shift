@@ -2,13 +2,13 @@
 
 Détection de dégradations de chaussée (fissures longitudinales D00, transversales D10, faïençage D20, nids-de-poule D40) qui reste fiable **dans un pays jamais vu**, **sous le flou de bougé** et **sur CPU**.
 
-> Statut : semaine 1 terminée (données, baselines, IC). Les `[X]` restants seront remplacés par des résultats d'exécutions réelles tracées dans MLflow.
+> Statut : semaines 1 et 2 terminées (données, baselines, IC, Q1 few-shot). Les `[X]` restants seront remplacés par des résultats d'exécutions réelles tracées dans MLflow.
 
 ## Questions de recherche
 
 | # | Question | Coût réel associé |
 |---|----------|-------------------|
-| Q1 | Combien d'images annotées du pays cible faut-il pour récupérer la performance ? (0 / 50 / 200 / 500) | Coût **estimé** (modèle publié, non mesuré) : [X]–[X] h pour 500 images |
+| Q1 | Combien d'images annotées du pays cible faut-il pour récupérer la performance ? (0 / 50 / 200 / 500) | Coût **estimé** (modèle publié, non mesuré) : 3,3–12,1 h pour 500 images |
 | Q2 | Le flou de bougé : défloutage Wiener avant détection ou augmentation par flou à l'entraînement ? | — |
 | Q3 | Quelle perte de précision pour quel gain de latence en ONNX / INT8 sur CPU ? | Latence CPU : [X] ms/image |
 
@@ -46,6 +46,30 @@ Valeurs mesurées, IC à 95 % par bootstrap sur les images de test (1 000 tirage
 
 Validation de l'évaluation : avec la même formule d'AP, le module `roadshift.eval` reproduit les mAP@50 d'Ultralytics à 0,0012 près sur les 20 évaluations ; les IC calculés sur Kaggle et recalculés hors Kaggle sont identiques.
 
+## Résultats Q1 : adapter YOLO11s aux États-Unis avec k images annotées
+
+Fine-tuning du modèle S1 sur les seules images cibles (protocole ci-dessus). Point de départ k = 0 : mAP@50 0,412 sur le test États-Unis. Gains = différence appariée avec k = 0 sur les mêmes images de test (IC 95 % bootstrap) ; pour 50, 200 et 500, étendue sur les 3 tirages d'images et, entre parenthèses, nombre de tirages où l'écart est significatif, **dans un sens ou dans l'autre** (un écart négatif est une perte). Coût d'annotation **estimé** (modèle publié), pas mesuré.
+
+| k images annotées | Coût estimé | mAP@50 États-Unis (moyenne) | Gain mAP@50 États-Unis | Gain F1 États-Unis | Effet sur le test source (mAP@50) |
+|---|---:|---:|---:|---:|---:|
+| 50 | 0,4 – 1,3 h | 0,390 | -0,032 à -0,005 (0/3) | -0,043 à -0,027 (3/3) | -0,116 à -0,089 (3/3) |
+| 200 | 1,3 – 4,9 h | 0,438 | +0,020 à +0,036 (0/3) | -0,028 à +0,004 (1/3) | -0,121 à -0,114 (3/3) |
+| 500 | 3,3 – 12,1 h | 0,456 | +0,041 à +0,046 (3/3) | +0,004 à +0,044 (2/3) | -0,138 à -0,126 (3/3) |
+| réserve complète (1 495) | 9,8 – 35,7 h | 0,498 | +0,086 (1/1) | +0,045 (1/1) | -0,135 (1/1) |
+
+![Courbe Q1](results/fewshot_curve.png)
+
+*Les barres verticales sont les IC de chaque point pris isolément ; elles se chevauchent alors que les gains appariés du tableau, plus précis (mêmes images), sont significatifs à partir de k = 500.*
+
+**Ce que montrent ces mesures** (`results/fewshot_gains.csv`) :
+
+- **50 images ne suffisent pas** : aucun gain de mAP@50, et le F1 baisse de façon significative sur les 3 tirages.
+- **200 images** : gains de mAP@50 positifs mais non significatifs sur les 3 tirages.
+- **Gain significatif à partir de 500 images** (≈ 3 à 12 h d'annotation estimées), sur les 3 tirages, d'environ +0,04 de mAP@50 ; la réserve complète (≈ 10 à 36 h) donne le gain le plus net.
+- **Oubli massif** : dès 50 images, le fine-tuning sur la seule cible fait perdre ≈ 0,09 à 0,14 de mAP@50 sur les pays sources, de façon significative dans tous les runs. Adapter ainsi le modèle à un nouveau pays le casse pour les anciens.
+
+Variance d'entraînement du modèle S1 (YOLO11s, seeds 42 et 2, `results/comparisons_s1_seeds.csv`) : écart non significatif entre seeds (+0,013 [-0,013 ; +0,040] en mAP@50 sur les États-Unis), bien inférieur à l'avantage de YOLO11s sur RT-DETR-l, qui tient avec le seed 2 (+0,086 [+0,051 ; +0,126]).
+
 ## Reproduire
 
 ```bash
@@ -64,11 +88,12 @@ python -m roadshift.eval.compare --run yolo11s=<run_yolo> --run rtdetr_l=<run_rt
 - Les métadonnées de trajet (GPS, séquence) ne sont pas publiées : le découpage par blocs réduit la fuite sans la garantir.
 - Le sous-ensemble États-Unis de RDD2022 ne contient **aucune image sans dégât** (0 / 4 805 XML sans objet, contre 8 % au Japon, 51 % en Inde et 62 % en Tchéquie). Les fausses alertes sur route saine ne sont donc pas mesurables sur le pays cible ; chaque test source est aussi évalué restreint aux images avec au moins un dégât (`*_pos`) pour une comparaison à conditions égales.
 - Distribution des classes très différente entre pays (ex. 23 nids-de-poule D40 seulement dans le test États-Unis) : les métriques par classe sur le pays cible sont rapportées avec leur intervalle de confiance.
-- **Un seul entraînement par modèle** : les IC couvrent l'aléa de l'échantillon de test, pas la variance d'entraînement (seed). La comparaison des modèles reste à confirmer avec plusieurs seeds.
+- **Variance d'entraînement partiellement mesurée** : YOLO11s a 2 seeds (42 et 2), RT-DETR-l un seul (≈ 6 h de GPU par run). Les IC bootstrap couvrent l'aléa de l'échantillon de test, pas celui de l'entraînement.
 - **Même budget, pas l'optimum de chaque modèle** : à 50 epochs, la validation de YOLO11s progresse encore (meilleur epoch = 50) alors que RT-DETR-l plafonne (meilleur epoch = 47).
 - **Recette de RT-DETR-l modifiée après un incident** : avec le lr « auto » d'Ultralytics (0,00125) en AMP, l'entraînement a divergé (NaN dès l'epoch 6, arrêt après 5 h 43) ; relancé avec le lr de sa recette d'origine (1e-4), sans NaN. Les deux runs n'ont donc pas exactement le même commit (seule la ligne RT-DETR de la config diffère).
 - **Petits effectifs par classe** : 2 boîtes D10 dans le test Inde (son mAP@50 est très instable : IC de l'écart entre modèles [−0,137 ; +0,267]) et 23 boîtes D40 dans le test États-Unis. Les AP par classe de ces cas ne sont pas interprétables.
-- [à compléter avec Q1, Q2, Q3]
+- **Q1, une seule recette de fine-tuning** : fine-tuning sur la cible seule (sans rejouer d'images sources), 30 epochs, lr / 10. L'oubli mesuré dépend de ce choix ; le seuil du F1, fixé sur la validation source, peut aussi être mal calibré pour la cible après fine-tuning, ce qui pénalise le F1 cible.
+- [à compléter avec Q2, Q3]
 
 ## Licences
 
