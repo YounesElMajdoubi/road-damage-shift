@@ -71,6 +71,26 @@ Fine-tuning du modèle S1 sur les seules images cibles (protocole ci-dessus). Po
 
 Variance d'entraînement du modèle S1 (YOLO11s, seeds 42 et 2, `results/comparisons_s1_seeds.csv`) : écart non significatif entre seeds (+0,013 [-0,013 ; +0,040] en mAP@50 sur les États-Unis), bien inférieur à l'avantage de YOLO11s sur RT-DETR-l, qui tient avec le seed 2 (+0,086 [+0,051 ; +0,126]).
 
+## Résultats Q1 (suite) : le rejeu d'images sources contre l'oubli (S2b)
+
+Mêmes runs qu'en S2, avec en plus autant d'images du train source que d'images cibles. Écarts appariés (mêmes images de test, IC 95 %) ; étendue sur les tirages et, entre parenthèses, nombre de runs où l'écart est significatif dans un sens ou dans l'autre.
+
+| k | Gain cible vs k=0, cible seule | Gain cible vs k=0, rejeu | Effet source vs k=0, cible seule | Effet source vs k=0, rejeu | Rejeu − cible seule : mAP@50 source | Rejeu − cible seule : F1 cible |
+|---|---:|---:|---:|---:|---:|---:|
+| 50 | -0,032 à -0,005 (0/3) | -0,065 à +0,008 (1/3) | -0,116 à -0,089 (3/3) | -0,068 à -0,045 (3/3) | +0,034 à +0,058 (3/3) | +0,038 à +0,052 (3/3) |
+| 200 | +0,020 à +0,036 (0/3) | +0,001 à +0,023 (0/3) | -0,121 à -0,114 (3/3) | -0,061 à -0,048 (3/3) | +0,060 à +0,066 (3/3) | +0,024 à +0,062 (3/3) |
+| 500 | +0,041 à +0,046 (3/3) | +0,043 à +0,059 (3/3) | -0,138 à -0,126 (3/3) | -0,045 à -0,040 (3/3) | +0,084 à +0,096 (3/3) | +0,035 à +0,050 (3/3) |
+| réserve (1 495) | +0,086 (1/1) | +0,080 (1/1) | -0,135 (1/1) | -0,007 (0/1) | +0,128 (1/1) | +0,059 (1/1) |
+
+![Rejeu contre cible seule](results/fewshot_curve_replay_vs_target.png)
+
+**Ce que montrent ces mesures** (`results/replay_vs_target_only.csv`, `results/fewshot_gains_replay.csv`) :
+
+- **Le rejeu réduit fortement l'oubli** : à k et tirage égaux, il améliore le mAP@50 sur les pays sources dans les 10 runs, de +0,03 à +0,13. Avec la réserve complète, l'oubli disparaît : mAP@50 source 0,361, écart avec le modèle S1 non significatif.
+- **Le gain sur la cible est conservé** : comme sans rejeu, il devient significatif à partir de 500 images (3/3 tirages), et le mAP@50 cible ne diffère pas significativement de la version sans rejeu dans 8 runs sur 10.
+- **Le F1 cible est meilleur avec le rejeu dans les 10 runs** (+0,02 à +0,06), probablement parce que le seuil choisi sur la validation source reste mieux calibré quand le modèle continue de voir des images sources.
+- Recommandation qui découle de ces mesures : pour adapter le modèle à un nouveau pays, annoter environ 500 images et fine-tuner **avec rejeu**.
+
 ## Reproduire
 
 ```bash
@@ -93,7 +113,7 @@ python -m roadshift.eval.compare --run yolo11s=<run_yolo> --run rtdetr_l=<run_rt
 - **Même budget, pas l'optimum de chaque modèle** : à 50 epochs, la validation de YOLO11s progresse encore (meilleur epoch = 50) alors que RT-DETR-l plafonne (meilleur epoch = 47).
 - **Recette de RT-DETR-l modifiée après un incident** : avec le lr « auto » d'Ultralytics (0,00125) en AMP, l'entraînement a divergé (NaN dès l'epoch 6, arrêt après 5 h 43) ; relancé avec le lr de sa recette d'origine (1e-4), sans NaN. Les deux runs n'ont donc pas exactement le même commit (seule la ligne RT-DETR de la config diffère).
 - **Petits effectifs par classe** : 2 boîtes D10 dans le test Inde (son mAP@50 est très instable : IC de l'écart entre modèles [−0,137 ; +0,267]) et 23 boîtes D40 dans le test États-Unis. Les AP par classe de ces cas ne sont pas interprétables.
-- **Q1, une seule recette de fine-tuning** : fine-tuning sur la cible seule (sans rejouer d'images sources), 30 epochs, lr / 10. L'oubli mesuré dépend de ce choix ; le seuil du F1, fixé sur la validation source, peut aussi être mal calibré pour la cible après fine-tuning, ce qui pénalise le F1 cible.
+- **Q1, deux recettes seulement** : cible seule et rejeu 1:1, avec 30 epochs et lr / 10 ; d'autres ratios de rejeu ou d'autres durées n'ont pas été testés. Le seuil du F1, fixé sur la validation source, peut être mal calibré pour la cible après fine-tuning, ce qui pénalise surtout le F1 sans rejeu.
 - [à compléter avec Q2, Q3]
 
 ## Licences

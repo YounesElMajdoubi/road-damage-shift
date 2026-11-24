@@ -85,11 +85,37 @@ eval:
   iou_match: 0.5                # appariement pour F1 (protocole CRDDC)
   bootstrap: {n_resamples: 1000, ci: 0.95}   # (S1-fin) IC par rééchantillonnage d'images
 
-blur:                           # (S3)
-  kernel_lengths: [0, 9, 15, 21, 31]   # longueur du flou de bougé linéaire, en px
-  angles_deg: [0, 45, 90]
+blur:                           # (S3, Q2) protocole fixé avant tout résultat sur images floutées
+  model: yolo11s                # modèle S1 (seed 42) : le meilleur sur la cible, et le candidat au déploiement CPU
+  kernel_lengths: [0, 9, 15, 21, 31]   # flou de bougé linéaire, en px (0 = images d'origine, ni flou ni bruit)
+  angles_deg: [0, 45, 90]       # un angle tiré par image (seedé par le nom de l'image) : bougé horizontal, oblique, vertical
+  noise_sigma: 0.01             # bruit gaussien ajouté après le flou (x 255) : un capteur réel n'est jamais sans bruit
+  jpeg_quality: 95              # images floutées réenregistrées en JPEG
+  eval_sets: [source_test, test_United_States]
+  seed: 42
+  wiener_k: 0.01                # rapport bruit/signal du filtre de Wiener, fixé a priori. PSF CONNUE (le noyau exact
+                                # utilisé pour flouter) : borne optimiste ; en réel il faudrait estimer le flou.
+  train_aug:                    # (c) même recette que S1, en AJOUTANT un flou de bougé aléatoire aux augmentations
+    p: 0.5                      #     par défaut d'Ultralytics (Albumentations MotionBlur, longueur 3 à 31 px,
+    blur_limit: [3, 31]         #     angle quelconque) : générateur différent de celui du test, mêmes ordres de grandeur.
 
-deploy:                         # (S3)
+deploy:                         # (S3, Q3) protocole fixé avant tout résultat de déploiement
+  model: yolo11s                # modèle S1 (seed 42), comme pour Q2
+  imgsz: 640                    # entrée fixe 1 x 3 x 640 x 640 (ONNX statique)
   onnx_opset: 17
-  latency_runs: 200
-  latency_warmup: 20
+  variants: [pytorch_fp32, onnx_fp32, onnx_int8]
+  # Coût de la quantification = onnx_int8 - onnx_fp32 (même prétraitement : image carrée 640x640).
+  # pytorch_fp32 est évalué par Ultralytics en lots rectangulaires : l'écart pytorch -> onnx mélange export
+  # et prétraitement, il est rapporté à part (constaté lors de la vérification du pipeline, avant tout résultat).
+  int8:                         # onnxruntime quantize_static, format QDQ
+    calibration_images: 200     # tirées du TRAIN source (jamais val/test), seed du projet
+    calibrate_method: MinMax
+    per_channel: true
+    op_types: [Conv]            # seules les convolutions ; la tête (DFL, sigmoïde, concat) reste en FP32
+    activation_type: QUInt8
+    weight_type: QInt8
+  latency:                      # latence du modèle seul (sans pré/post-traitement), batch 1, sur CPU
+    threads: 4
+    warmup: 20
+    runs: 200
+  eval_sets: [source_test, test_United_States]
