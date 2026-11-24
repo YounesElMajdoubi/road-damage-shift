@@ -105,13 +105,13 @@ deploy:                         # (S3, Q3) protocole fixé avant tout résultat 
   onnx_opset: 17
   variants: [pytorch_fp32, onnx_fp32, onnx_int8]
   # Coût de la quantification = onnx_int8 - onnx_fp32 (même prétraitement : image carrée 640x640).
-  # pytorch_fp32 est évalué par Ultralytics en lots rectangulaires : l'écart pytorch -> onnx mélange export
-  # et prétraitement, il est rapporté à part (constaté lors de la vérification du pipeline, avant tout résultat).
+  # pytorch_fp32 est évalué par Ultralytics en mode rectangulaire : image carrée 640 entourée d'une bordure
+  # jusqu'à 672x672. L'écart pytorch -> onnx mélange export et entrée, il est rapporté à part.
   int8:                         # onnxruntime quantize_static, format QDQ
     calibration_images: 200     # tirées du TRAIN source (jamais val/test), seed du projet
     calibrate_method: MinMax
     per_channel: true
-    op_types: [Conv]            # seules les convolutions ; la tête (DFL, sigmoïde, concat) reste en FP32
+    op_types: [Conv]            # toutes les convolutions, tête et DFL compris (vérifié sur le modèle : 88/88)
     activation_type: QUInt8
     weight_type: QInt8
   latency:                      # latence du modèle seul (sans pré/post-traitement), batch 1, sur CPU
@@ -119,3 +119,16 @@ deploy:                         # (S3, Q3) protocole fixé avant tout résultat 
     warmup: 20
     runs: 200
   eval_sets: [source_test, test_United_States]
+  # Q3b, EXPLORATOIRE : décidé après les résultats de Q3 (perte INT8 de -0,145 aux États-Unis), avant tout résultat
+  # Q3b. Plan 2 x 2 : quantifier ou non la tête de détection (model.23 de YOLO11s : 25 Conv, dont DFL) x
+  # calibrer sur 200 images sources ou sur 100 sources + 100 américaines NON annotées (réserve few-shot, jamais
+  # le test). Le reste = deploy.int8. int8_all_src reproduit Q3 (contrôle).
+  int8_variants:
+    int8_all_src: {exclude_name_contains: [], calibration: {list_source_train.txt: 200}}
+    int8_nohead_src: {exclude_name_contains: ["/model.23/"], calibration: {list_source_train.txt: 200}}
+    int8_all_mix:
+      exclude_name_contains: []
+      calibration: {list_source_train.txt: 100, list_pool_United_States.txt: 100}
+    int8_nohead_mix:
+      exclude_name_contains: ["/model.23/"]
+      calibration: {list_source_train.txt: 100, list_pool_United_States.txt: 100}

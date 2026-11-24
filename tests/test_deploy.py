@@ -10,7 +10,14 @@ ort = pytest.importorskip("onnxruntime")
 from onnx import TensorProto, helper, numpy_helper  # noqa: E402
 
 from roadshift.deploy.bench import bench  # noqa: E402
-from roadshift.deploy.quantize import calibration_images, copy_metadata, letterbox, quantize_int8  # noqa: E402
+from roadshift.deploy.quantize import (  # noqa: E402
+    calibration_images,
+    calibration_mix,
+    copy_metadata,
+    letterbox,
+    quantize_int8,
+    quantized_convs,
+)
 
 SIZE = 32
 
@@ -21,9 +28,9 @@ def _tiny_model(path):
     w1 = numpy_helper.from_array(rng.normal(0, 0.3, (8, 3, 3, 3)).astype(np.float32), "w1")
     w2 = numpy_helper.from_array(rng.normal(0, 0.3, (4, 8, 1, 1)).astype(np.float32), "w2")
     nodes = [
-        helper.make_node("Conv", ["images", "w1"], ["c1"], pads=[1, 1, 1, 1]),
-        helper.make_node("Relu", ["c1"], ["r1"]),
-        helper.make_node("Conv", ["r1", "w2"], ["c2"]),
+        helper.make_node("Conv", ["images", "w1"], ["c1"], name="/model.0/conv/Conv", pads=[1, 1, 1, 1]),
+        helper.make_node("Relu", ["c1"], ["r1"], name="/model.0/act/Relu"),
+        helper.make_node("Conv", ["r1", "w2"], ["c2"], name="/model.23/cv2/Conv"),
         helper.make_node("Sigmoid", ["c2"], ["output0"]),
     ]
     inp = helper.make_tensor_value_info("images", TensorProto.FLOAT, [1, 3, SIZE, SIZE])
@@ -97,3 +104,31 @@ def test_bench_onnx(tmp_path):
     r = rows[0]
     assert r["model"] == "m.onnx" and r["runs"] == 5 and 0 < r["ms_median"] <= r["ms_p90"] + 1e-9
     assert r["backend"].startswith("onnxruntime") and r["size_bytes"] > 0
+
+
+def test_quantize_excludes_head_by_name(tmp_path):
+    fp32 = _tiny_model(tmp_path / "fp32.onnx")
+    cfg = {"per_channel": True, "activation_type": "QUInt8", "weight_type": "QInt8", "op_types": ["Conv"],
+           "calibrate_method": "MinMax"}  # fmt: skip
+    head = {**cfg, "exclude_name_contains": ["/model.23/"]}
+    q_all = quantize_int8(fp32, tmp_path / "all.onnx", _images(tmp_path), cfg, SIZE)
+    q_head = quantize_int8(fp32, tmp_path / "nohead.onnx", _images(tmp_path), head, SIZE)
+    assert quantized_convs(q_all)[:2] == (2, 2)
+    n, q, fp = quantized_convs(q_head)
+    assert (n, q) == (2, 1) and fp == ["/model.23/cv2/Conv"]
+    bad = {**cfg, "exclude_name_contains": ["/model.99/"]}
+    with pytest.raises(ValueError, match="aucun nœud"):  # motif mal écrit : erreur, pas une copie silencieuse de Q3
+        quantize_int8(fp32, tmp_path / "x.onnx", _images(tmp_path), bad, SIZE)
+
+
+def test_calibration_mix_counts_and_refuses_eval_lists(tmp_path):
+    for name, n in (("list_source_train.txt", 30), ("list_pool_United_States.txt", 20)):
+        (tmp_path / name).write_text("\n".join(f"./images/X/{name[5:9]}_{i}.jpg" for i in range(n)))
+    spec = {"list_source_train.txt": 5, "list_pool_United_States.txt": 4}
+    imgs = calibration_mix(tmp_path, spec, seed=42)
+    assert len(imgs) == 9 and len(set(imgs)) == 9
+    assert sum(p.name.startswith("pool") for p in imgs) == 4
+    assert imgs == calibration_mix(tmp_path, spec, seed=42)  # reproductible
+    for forbidden in ("list_test_United_States.txt", "list_source_val.txt"):
+        with pytest.raises(ValueError):
+            calibration_mix(tmp_path, {forbidden: 5}, seed=42)

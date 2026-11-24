@@ -45,6 +45,14 @@ Détection de dégradations de chaussée (fissures longitudinales D00, transvers
 - Précision : IC bootstrap et écarts appariés. **Coût de la quantification = INT8 − ONNX FP32** (même prétraitement) ; l'écart PyTorch → ONNX est rapporté à part, car Ultralytics n'évalue pas PyTorch sur la même entrée : en mode rectangulaire (marge 0,5), une image carrée redimensionnée à 640 px est entourée d'une bordure jusqu'à 672 × 672, alors que l'ONNX statique reçoit 640 × 640.
 - Même outil de latence (`roadshift.deploy.bench`) sur le CPU de Kaggle et sur un PC personnel.
 
+### Protocole Q3b : peut-on sauver l'INT8 ? (exploratoire)
+
+Décidé **après** les résultats de Q3 (perte INT8 de −0,145 aux États-Unis) et **avant** tout résultat Q3b ; présenté comme exploratoire pour cette raison.
+
+- Plan 2 × 2 : quantifier la tête de détection ou la laisser en FP32 (`/model.23/`, 25 convolutions dont DFL ; les 63 autres restent quantifiées) × calibrer sur 200 images du train source ou sur 100 sources + 100 images américaines **non annotées**, tirées de la réserve few-shot (jamais du test ; aucun label lu).
+- Le reste est identique à Q3. La variante « tête quantifiée, calibration source » reproduit Q3 et sert de contrôle.
+- Référence : ONNX FP32 (même entrée 640 × 640), écarts appariés avec IC 95 % ; latence et taille de chaque variante.
+
 ## Résultats S1 : baselines (Japon + Inde + Tchéquie → test source et États-Unis jamais vus)
 
 Valeurs mesurées, IC à 95 % par bootstrap sur les images de test (1 000 tirages). mAP@50 au sens COCO ; F1 micro « CRDDC » (IoU ≥ 0,5, classe correcte) au seuil de confiance choisi sur la validation source (YOLO11s 0,18 ; RT-DETR-l 0,44). mAP@50-95 : valeur Ultralytics, sans IC.
@@ -179,7 +187,7 @@ python -m roadshift.eval.compare --run yolo11s=<run_yolo> --run rtdetr_l=<run_rt
 ```
 Q1 : `notebooks/02_fewshot_kaggle.ipynb` (`MODE = "target_only"` ou `"replay"`), puis `python -m roadshift.fewshot.gains` et `python -m roadshift.fewshot.plot`.
 Q2 : `notebooks/03_blur_kaggle.ipynb` (jeux floutés : `python -m roadshift.blur.build` ; rapport : `python -m roadshift.blur.report`).
-Q3 : `notebooks/04_deploy_cpu_kaggle.ipynb` (CPU seul) ; latence sur une autre machine :
+Q3 : `notebooks/04_deploy_cpu_kaggle.ipynb` (CPU seul) ; Q3b : `notebooks/05_int8_variants_kaggle.ipynb` ; latence sur une autre machine :
 ```bash
 python -m roadshift.deploy.bench --models yolo11s_s1.pt yolo11s_s1_fp32.onnx yolo11s_s1_int8.onnx --threads <cœurs> --out results/deploy_latency_pc.csv
 ```
