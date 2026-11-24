@@ -30,6 +30,21 @@ Détection de dégradations de chaussée (fissures longitudinales D00, transvers
 - **S2b, rejeu** (fixé après les résultats de S2, avant tout résultat avec rejeu) : mêmes runs, mêmes tirages et même recette, avec en plus autant d'images tirées du **train** source que d'images cibles (ratio 1:1, tirage seedé ; jamais d'image de validation ou de test source). Chaque run S2b est comparé à son jumeau S2 (même k, même tirage) sur les mêmes images de test. Le coût d'annotation est inchangé : les images sources sont déjà annotées.
 - **Coût d'annotation estimé, pas mesuré** : 7,8 s par image + 7 à 34,5 s par boîte (Su et al. 2012 ; Papadopoulos et al., ICCV 2017), appliqués aux nombres exacts d'images et de boîtes de chaque sous-ensemble. Ces temps viennent d'objets ImageNet bien délimités ; une fissure fine ou un faïençage est probablement plus long à annoter, la borne haute est donc la plus réaliste.
 
+### Protocole Q2 : flou de bougé (fixé avant les résultats)
+
+- Modèle : YOLO11s S1 (seed 42). Jeux : test source et test États-Unis, floutés à 5 niveaux (0 = images d'origine, puis 9, 15, 21, 31 px).
+- Flou de bougé linéaire, angle tiré une fois par image (0°, 45° ou 90°) et identique à tous les niveaux, puis bruit gaussien σ = 1 % ; réenregistrement JPEG (qualité 95).
+- (a) aucun traitement ; (b) défloutage de Wiener avant détection, K = 0,01, **avec le noyau exact** (borne optimiste : en réel il faudrait estimer le flou) ; (c) même recette d'entraînement que S1, avec en plus un `MotionBlur` aléatoire (p = 0,5, 3 à 31 px, angle quelconque) ajouté aux augmentations par défaut d'Ultralytics. Le générateur de flou de (c) diffère de celui du test, mais les intensités sont du même ordre.
+- Mêmes images pour toutes les approches : écarts appariés (b − a) et (c − a) à chaque niveau, IC 95 % bootstrap. (c − a) sur images nettes mesure ce que coûte l'augmentation quand il n'y a pas de flou. Le temps de Wiener par image (CPU) est mesuré.
+
+### Protocole Q3 : déploiement sans GPU (fixé avant les résultats)
+
+- Modèle : YOLO11s S1 (seed 42), entrée fixe 640 × 640. Trois versions : PyTorch FP32, ONNX FP32 (opset 17), ONNX INT8.
+- INT8 : quantification statique onnxruntime au format QDQ, **seules les convolutions** (la tête de détection reste en FP32), poids INT8 par canal, activations UINT8, calibration MinMax sur 200 images tirées du **train** source.
+- Latence du modèle seul : même tenseur pour toutes les versions, batch 1, 20 passes d'échauffement puis 200 passes chronométrées ; médiane et 90e centile. Latence de bout en bout (pré/post-traitement compris) relevée pendant l'évaluation.
+- Précision : IC bootstrap et écarts appariés. **Coût de la quantification = INT8 − ONNX FP32** (même prétraitement carré) ; l'écart PyTorch → ONNX est rapporté à part, car Ultralytics évalue PyTorch en lots rectangulaires.
+- Même outil de latence (`roadshift.deploy.bench`) sur le CPU de Kaggle et sur un PC personnel.
+
 ## Résultats S1 : baselines (Japon + Inde + Tchéquie → test source et États-Unis jamais vus)
 
 Valeurs mesurées, IC à 95 % par bootstrap sur les images de test (1 000 tirages). mAP@50 au sens COCO ; F1 micro « CRDDC » (IoU ≥ 0,5, classe correcte) au seuil de confiance choisi sur la validation source (YOLO11s 0,18 ; RT-DETR-l 0,44). mAP@50-95 : valeur Ultralytics, sans IC.
@@ -102,6 +117,12 @@ Entraînement : `notebooks/01_baselines_kaggle.ipynb` (GPU T4 Kaggle). IC et com
 ```bash
 python -m roadshift.eval.report  --runs-dir <run>/ultralytics_run --data <dataset_meta> --model yolo11s --out results/ci_yolo11s.csv
 python -m roadshift.eval.compare --run yolo11s=<run_yolo> --run rtdetr_l=<run_rtdetr> --data <dataset_meta> --out results/comparisons_s1.csv
+```
+Q1 : `notebooks/02_fewshot_kaggle.ipynb` (`MODE = "target_only"` ou `"replay"`), puis `python -m roadshift.fewshot.gains` et `python -m roadshift.fewshot.plot`.
+Q2 : `notebooks/03_blur_kaggle.ipynb` (jeux floutés : `python -m roadshift.blur.build` ; rapport : `python -m roadshift.blur.report`).
+Q3 : `notebooks/04_deploy_cpu_kaggle.ipynb` (CPU seul) ; latence sur une autre machine :
+```bash
+python -m roadshift.deploy.bench --models yolo11s_s1.pt yolo11s_s1_fp32.onnx yolo11s_s1_int8.onnx --threads <cœurs> --out results/deploy_latency_pc.csv
 ```
 
 ## Limites
