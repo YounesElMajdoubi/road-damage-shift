@@ -1,0 +1,19 @@
+comparison,eval,metric,a,b,diff,lo,hi,significant
+model_paired,source_test,mAP50,pytorch_fp32,onnx_fp32,0.005,-0.0044,0.013,False
+model_paired,source_test,F1,pytorch_fp32,onnx_fp32,0.0043,-0.0061,0.0169,False
+model_paired,test_United_States,mAP50,pytorch_fp32,onnx_fp32,0.021,0.0105,0.0316,True
+model_paired,test_United_States,F1,pytorch_fp32,onnx_fp32,0.0215,0.0114,0.0314,True
+model_paired,source_test,mAP50,pytorch_fp32,onnx_int8,0.0409,0.0268,0.0554,True
+model_paired,source_test,F1,pytorch_fp32,onnx_int8,0.0327,0.0165,0.0497,True
+model_paired,test_United_States,mAP50,pytorch_fp32,onnx_int8,0.1659,0.1213,0.2114,True
+model_paired,test_United_States,F1,pytorch_fp32,onnx_int8,0.0968,0.08,0.1129,True
+model_paired,source_test,mAP50,onnx_fp32,onnx_int8,0.0358,0.024,0.0487,True
+model_paired,source_test,F1,onnx_fp32,onnx_int8,0.0284,0.014,0.0437,True
+model_paired,test_United_States,mAP50,onnx_fp32,onnx_int8,0.1449,0.102,0.1877,True
+model_paired,test_United_States,F1,onnx_fp32,onnx_int8,0.0753,0.0588,0.0907,True
+target_minus_source,test_United_States - source_test,mAP50,pytorch_fp32,pytorch_fp32,0.0441,-0.0116,0.108,False
+target_minus_source,test_United_States - source_test,F1,pytorch_fp32,pytorch_fp32,0.0688,0.0401,0.0981,True
+target_minus_source,test_United_States - source_test,mAP50,onnx_fp32,onnx_fp32,0.0282,-0.0231,0.0911,False
+target_minus_source,test_United_States - source_test,F1,onnx_fp32,onnx_fp32,0.0516,0.0235,0.08,True
+target_minus_source,test_United_States - source_test,mAP50,onnx_int8,onnx_int8,-0.0809,-0.1165,-0.0365,True
+target_minus_source,test_United_States - source_test,F1,onnx_int8,onnx_int8,0.0047,-0.0258,0.0338,False

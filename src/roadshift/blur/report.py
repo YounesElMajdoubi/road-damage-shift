@@ -89,7 +89,9 @@ def blur_report(base: Path, aug: Path | None, data: Path, n_boot: int = 1000, se
 
 
 def plot_blur(scores: list[dict], out_png: Path, metric: str = "mAP50") -> Path:
-    """Petits multiples (un panneau par jeu), 3 séries en couleurs validées + marqueurs distincts + étiquettes."""
+    """Petits multiples (un panneau par jeu, même axe y), 3 séries en couleurs validées + marqueurs distincts.
+
+    Les valeurs sont dans blur_scores.csv : pas d'étiquette numérique sur les points (elles se chevauchaient)."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -101,7 +103,7 @@ def plot_blur(scores: list[dict], out_png: Path, metric: str = "mAP50") -> Path:
     markers = {"none": "o", "wiener": "s", "aug": "D"}  # encodage secondaire (turquoise peu contrasté)
     titles = {"source_test": "Test des pays sources", "test_United_States": "Pays jamais vu (États-Unis)"}
     sets = [s for s in ("source_test", "test_United_States") if any(r["eval_set"] == s for r in scores)]
-    fig, axes = plt.subplots(1, len(sets), figsize=(5.4 * len(sets), 4.2), facecolor=SURFACE)
+    fig, axes = plt.subplots(1, len(sets), figsize=(5.4 * len(sets), 4.4), facecolor=SURFACE, sharey=True)
     axes = [axes] if len(sets) == 1 else list(axes)
     for ax, s in zip(axes, sets, strict=True):
         ax.set_facecolor(SURFACE)
@@ -109,7 +111,9 @@ def plot_blur(scores: list[dict], out_png: Path, metric: str = "mAP50") -> Path:
         pos = {length: i for i, length in enumerate(lengths)}
         present = [m for m in METHODS if any(r["method"] == m and r["eval_set"] == s for r in scores)]
         for j, m in enumerate(present):
-            pts = sorted((r for r in scores if r["method"] == m and r["eval_set"] == s), key=lambda r: r["blur_length"])
+            pts = sorted(
+                (r for r in scores if r["method"] == m and r["eval_set"] == s), key=lambda r: int(r["blur_length"])
+            )  # int : relu depuis un CSV, c'est du texte
             dx = (j - (len(present) - 1) / 2) * 0.09
             x = [pos[int(r["blur_length"])] + dx for r in pts]
             y = [float(r[metric]) for r in pts]
@@ -117,13 +121,9 @@ def plot_blur(scores: list[dict], out_png: Path, metric: str = "mAP50") -> Path:
                    [float(r[f"{metric}_hi"]) - y_ for y_, r in zip(y, pts, strict=True)]]  # fmt: skip
             ax.errorbar(x, y, yerr=err, color=colors[m], lw=2, marker=markers[m], ms=8, capsize=0, elinewidth=1.5,
                         markeredgecolor=SURFACE, markeredgewidth=2, label=METHODS[m], zorder=3)  # fmt: skip
-            dy = (j - (len(present) - 1) / 2) * -13
-            ax.annotate(f"{y[-1]:.3f}", (x[-1], y[-1]), xytext=(10, dy), textcoords="offset points", va="center",
-                        fontsize=9, color=INK)  # fmt: skip
         ax.set_title(titles.get(s, s), loc="left", fontsize=11, color=INK)
         ax.set_xticks(range(len(lengths)), [f"{v} px" if v else "net" for v in lengths], fontsize=8, color=INK2)
         ax.set_xlabel("longueur du flou de bougé", fontsize=9, color=INK2)
-        ax.set_ylabel(f"{metric} (IC 95 % bootstrap)", fontsize=9, color=INK2)
         ax.grid(axis="y", color=GRID, lw=0.8)
         ax.set_axisbelow(True)
         for side in ("top", "right"):
@@ -132,8 +132,10 @@ def plot_blur(scores: list[dict], out_png: Path, metric: str = "mAP50") -> Path:
             ax.spines[side].set_color(GRID)
         ax.tick_params(colors=INK2, labelsize=8)
         ax.set_xlim(-0.4, len(lengths) - 0.4)
-    axes[0].legend(frameon=False, fontsize=9, loc="lower left", labelcolor=INK)
-    fig.tight_layout()
+    axes[0].set_ylabel(f"{metric.replace('mAP50', 'mAP@50')} (IC 95 % bootstrap)", fontsize=9, color=INK2)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, fontsize=9, loc="upper center", ncol=len(labels), labelcolor=INK)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
     out_png = Path(out_png)
     fig.savefig(out_png, dpi=160, facecolor=SURFACE)
     plt.close(fig)

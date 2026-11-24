@@ -1,0 +1,4 @@
+variant,model,backend,size_MB,size_bytes,threads,imgsz,warmup,runs,ms_median,ms_p90,ms_mean,fps_median,cpu,os
+pytorch_fp32,yolo11s_s1.pt,torch 2.11.0+cpu,19.18,19180378,4,640,20,200,271.51,278.76,275.2,3.7,Intel(R) Xeon(R) CPU @ 2.20GHz,Linux-6.18.55+-x86_64-with-glibc2.39
+onnx_fp32,yolo11s_s1_fp32.onnx,onnxruntime 1.32.0,37.93,37932964,4,640,20,200,203.91,208.17,206.39,4.9,Intel(R) Xeon(R) CPU @ 2.20GHz,Linux-6.18.55+-x86_64-with-glibc2.39
+onnx_int8,yolo11s_s1_int8.onnx,onnxruntime 1.32.0,10.09,10093078,4,640,20,200,182.77,187.46,184.54,5.5,Intel(R) Xeon(R) CPU @ 2.20GHz,Linux-6.18.55+-x86_64-with-glibc2.39

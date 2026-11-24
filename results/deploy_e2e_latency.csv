@@ -1,0 +1,4 @@
+variant,e2e_preprocess_ms,e2e_inference_ms,e2e_loss_ms,e2e_postprocess_ms
+pytorch_fp32,4.7,331.8,0.0,0.6
+onnx_fp32,1.0,219.5,0.0,1.4
+onnx_int8,1.1,199.6,0.0,1.4

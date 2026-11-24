@@ -1,0 +1,56 @@
+{
+  "n_images_processed": 9220,
+  "lists": [
+    "blur_L15_source_test",
+    "blur_L15_test_United_States",
+    "blur_L21_source_test",
+    "blur_L21_test_United_States",
+    "blur_L31_source_test",
+    "blur_L31_test_United_States",
+    "blur_L9_source_test",
+    "blur_L9_test_United_States",
+    "wiener_L15_source_test",
+    "wiener_L15_test_United_States",
+    "wiener_L21_source_test",
+    "wiener_L21_test_United_States",
+    "wiener_L31_source_test",
+    "wiener_L31_test_United_States",
+    "wiener_L9_source_test",
+    "wiener_L9_test_United_States",
+    "blur_L0_source_test",
+    "blur_L0_test_United_States"
+  ],
+  "wiener_ms_median": 365.105,
+  "wiener_ms_p90": 499.31600000000003,
+  "build_minutes": 21.02,
+  "config": {
+    "model": "yolo11s",
+    "kernel_lengths": [
+      0,
+      9,
+      15,
+      21,
+      31
+    ],
+    "angles_deg": [
+      0,
+      45,
+      90
+    ],
+    "noise_sigma": 0.01,
+    "jpeg_quality": 95,
+    "eval_sets": [
+      "source_test",
+      "test_United_States"
+    ],
+    "seed": 42,
+    "wiener_k": 0.01,
+    "train_aug": {
+      "p": 0.5,
+      "blur_limit": [
+        3,
+        31
+      ]
+    }
+  }
+}

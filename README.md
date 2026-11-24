@@ -2,15 +2,15 @@
 
 Détection de dégradations de chaussée (fissures longitudinales D00, transversales D10, faïençage D20, nids-de-poule D40) qui reste fiable **dans un pays jamais vu**, **sous le flou de bougé** et **sur CPU**.
 
-> Statut : semaines 1 et 2 terminées (données, baselines, IC, Q1 few-shot). Les `[X]` restants seront remplacés par des résultats d'exécutions réelles tracées dans MLflow.
+> Statut : semaines 1 à 3 terminées (données, baselines, Q1 few-shot, Q2 flou, Q3 CPU). Restent : référence zero-shot, analyse d'erreurs, API, démo. Les `[X]` restants seront remplacés par des résultats d'exécutions réelles tracées dans MLflow.
 
 ## Questions de recherche
 
 | # | Question | Coût réel associé |
 |---|----------|-------------------|
 | Q1 | Combien d'images annotées du pays cible faut-il pour récupérer la performance ? (0 / 50 / 200 / 500) | Coût **estimé** (modèle publié, non mesuré) : 3,3–12,1 h pour 500 images |
-| Q2 | Le flou de bougé : défloutage Wiener avant détection ou augmentation par flou à l'entraînement ? | — |
-| Q3 | Quelle perte de précision pour quel gain de latence en ONNX / INT8 sur CPU ? | Latence CPU : [X] ms/image |
+| Q2 | Le flou de bougé : défloutage Wiener avant détection ou augmentation par flou à l'entraînement ? | Wiener : 365 ms/image (médiane, CPU), en plus de la détection |
+| Q3 | Quelle perte de précision pour quel gain de latence en ONNX / INT8 sur CPU ? | Latence CPU (Kaggle, 4 threads) : 204 ms/image en ONNX FP32, 183 ms en INT8 ; PC personnel : [X] |
 
 ## Protocole
 
@@ -33,16 +33,16 @@ Détection de dégradations de chaussée (fissures longitudinales D00, transvers
 ### Protocole Q2 : flou de bougé (fixé avant les résultats)
 
 - Modèle : YOLO11s S1 (seed 42). Jeux : test source et test États-Unis, floutés à 5 niveaux (0 = images d'origine, puis 9, 15, 21, 31 px).
-- Flou de bougé linéaire, angle tiré une fois par image (0°, 45° ou 90°) et identique à tous les niveaux, puis bruit gaussien σ = 1 % ; réenregistrement JPEG (qualité 95).
+- Flou de bougé linéaire, angle tiré une fois par image (0°, 45° ou 90°) et identique à tous les niveaux, puis bruit gaussien σ = 1 % ; réenregistrement JPEG (qualité 95). Le niveau « net » est l'image d'origine, sans bruit ni réenregistrement.
 - (a) aucun traitement ; (b) défloutage de Wiener avant détection, K = 0,01, **avec le noyau exact** (borne optimiste : en réel il faudrait estimer le flou) ; (c) même recette d'entraînement que S1, avec en plus un `MotionBlur` aléatoire (p = 0,5, 3 à 31 px, angle quelconque) ajouté aux augmentations par défaut d'Ultralytics. Le générateur de flou de (c) diffère de celui du test, mais les intensités sont du même ordre.
 - Mêmes images pour toutes les approches : écarts appariés (b − a) et (c − a) à chaque niveau, IC 95 % bootstrap. (c − a) sur images nettes mesure ce que coûte l'augmentation quand il n'y a pas de flou. Le temps de Wiener par image (CPU) est mesuré.
 
 ### Protocole Q3 : déploiement sans GPU (fixé avant les résultats)
 
 - Modèle : YOLO11s S1 (seed 42), entrée fixe 640 × 640. Trois versions : PyTorch FP32, ONNX FP32 (opset 17), ONNX INT8.
-- INT8 : quantification statique onnxruntime au format QDQ, **seules les convolutions** (la tête de détection reste en FP32), poids INT8 par canal, activations UINT8, calibration MinMax sur 200 images tirées du **train** source.
+- INT8 : quantification statique onnxruntime au format QDQ des **convolutions uniquement**, poids INT8 par canal, activations UINT8, calibration MinMax sur 200 images tirées du **train** source. *Correction après le run* : cette ligne affirmait que la tête de détection restait en FP32 ; c'est faux. L'inspection du modèle INT8 montre que les 88 convolutions sont quantifiées, dont les 25 de la tête et la convolution DFL qui décode les boîtes. Restent en FP32 : activations SiLU, concaténations, décodage final.
 - Latence du modèle seul : même tenseur pour toutes les versions, batch 1, 20 passes d'échauffement puis 200 passes chronométrées ; médiane et 90e centile. Latence de bout en bout (pré/post-traitement compris) relevée pendant l'évaluation.
-- Précision : IC bootstrap et écarts appariés. **Coût de la quantification = INT8 − ONNX FP32** (même prétraitement carré) ; l'écart PyTorch → ONNX est rapporté à part, car Ultralytics évalue PyTorch en lots rectangulaires.
+- Précision : IC bootstrap et écarts appariés. **Coût de la quantification = INT8 − ONNX FP32** (même prétraitement) ; l'écart PyTorch → ONNX est rapporté à part, car Ultralytics n'évalue pas PyTorch sur la même entrée : en mode rectangulaire (marge 0,5), une image carrée redimensionnée à 640 px est entourée d'une bordure jusqu'à 672 × 672, alors que l'ONNX statique reçoit 640 × 640.
 - Même outil de latence (`roadshift.deploy.bench`) sur le CPU de Kaggle et sur un PC personnel.
 
 ## Résultats S1 : baselines (Japon + Inde + Tchéquie → test source et États-Unis jamais vus)
@@ -122,6 +122,49 @@ Mêmes runs qu'en S2, avec en plus autant d'images du train source que d'images 
 - **Le F1 cible est meilleur avec le rejeu dans les 10 runs** (+0,02 à +0,06), probablement parce que le seuil choisi sur la validation source reste mieux calibré quand le modèle continue de voir des images sources.
 - Recommandation qui découle de ces mesures : pour adapter le modèle à un nouveau pays, annoter environ 500 images et fine-tuner **avec rejeu**.
 
+## Résultats Q2 : flou de bougé
+
+Modèle S1 (YOLO11s, seed 42), 1 300 images du test source et 1 005 du test États-Unis ; les trois approches sont évaluées sur les mêmes images floutées. mAP@50 au sens COCO (IC 95 % dans `results/blur_scores.csv`) ; F1 au seuil choisi sur la validation source nette de chaque modèle (S1 : 0,18 ; modèle augmenté : 0,15).
+
+| Flou | Source : aucun | Source : Wiener | Source : augmentation | États-Unis : aucun | États-Unis : Wiener | États-Unis : augmentation |
+|---|---:|---:|---:|---:|---:|---:|
+| net | 0,368 | 0,368 | 0,336 | 0,412 | 0,412 | 0,363 |
+| 9 px | 0,119 | 0,216 | 0,216 | 0,066 | 0,267 | 0,186 |
+| 15 px | 0,045 | 0,148 | 0,161 | 0,019 | 0,161 | 0,123 |
+| 21 px | 0,024 | 0,099 | 0,133 | 0,012 | 0,109 | 0,090 |
+| 31 px | 0,014 | 0,052 | 0,089 | 0,007 | 0,063 | 0,058 |
+
+![Courbe Q2](results/blur_curve.png)
+
+**Ce que montrent ces mesures** (`results/blur_gains.csv`) :
+
+- **Sans traitement, le flou détruit la détection** : dès 9 px, le mAP@50 passe de 0,368 à 0,119 sur le test source et de 0,412 à 0,066 aux États-Unis ; à 15 px il ne reste que 0,045 et 0,019. Cette première chute inclut aussi le bruit et le réenregistrement JPEG, absents du niveau « net ».
+- **Les deux approches aident à tous les niveaux** : les 16 écarts appariés avec « aucun traitement » (2 approches × 4 niveaux × 2 jeux) sont significatifs, en mAP@50 comme en F1. Exemple à 9 px aux États-Unis : +0,201 [+0,162 ; +0,248] avec Wiener, +0,120 [+0,090 ; +0,158] avec l'augmentation.
+- **Aucune ne rattrape le niveau net** : au mieux 0,216 sur le test source et 0,267 aux États-Unis, à 9 px.
+- **La meilleure approche dépend du jeu.** Comparaison directe non appariée (les prédictions image par image n'ont pas été exportées) : on ne retient que les cas où les IC 95 % sont disjoints. Aux États-Unis, Wiener donne un meilleur F1 à tous les niveaux (0,343 contre 0,215 à 9 px) ; en mAP@50 ses valeurs sont plus hautes mais les IC se chevauchent. Sur le test source, l'augmentation fait mieux au flou le plus fort (31 px : 0,089 contre 0,052 en mAP@50) ; les deux sont équivalentes à 9 px.
+- **L'augmentation coûte sur images nettes** : −0,033 [−0,051 ; −0,015] en mAP@50 sur le test source et −0,049 [−0,085 ; −0,018] aux États-Unis (F1 : −0,025 et −0,067). Ses scores nets (0,336 et 0,363) sont sous ceux des 3 seeds S1 (au plus bas 0,356 et 0,383), donc au-delà de la variance de seed observée, mais il n'y a qu'un entraînement augmenté.
+- **Wiener ne change rien aux images nettes, mais suppose le noyau de flou connu** (borne optimiste) et coûte 365 ms par image en médiane (p90 : 499 ms), du même ordre que la détection elle-même sur CPU (Q3). Ce temps a été mesuré en parallèle sur le CPU de la machine GPU de Kaggle, pas dans les conditions de Q3 : c'est un ordre de grandeur.
+
+## Résultats Q3 : déploiement sur CPU
+
+CPU Kaggle (Intel Xeon 2,20 GHz, 4 threads), batch 1, entrée 640 × 640. Latence du modèle seul sur 200 passes ; IC 95 % bootstrap ; F1 au seuil choisi sur la validation source de chaque version (0,18 en FP32, 0,14 en INT8).
+
+| Version | Taille (Mo) | Latence modèle seul, ms (médiane / p90) | mAP@50 test source | F1 test source | mAP@50 États-Unis | F1 États-Unis |
+|---|---:|---:|---:|---:|---:|---:|
+| PyTorch FP32 | 19,2 | 272 / 279 | 0,368 [0,347 ; 0,399] | 0,428 [0,405 ; 0,452] | 0,412 [0,368 ; 0,468] | 0,497 [0,479 ; 0,513] |
+| ONNX FP32 | 37,9 | 204 / 208 | 0,363 [0,341 ; 0,393] | 0,423 [0,399 ; 0,446] | 0,391 [0,347 ; 0,446] | 0,475 [0,457 ; 0,491] |
+| ONNX INT8 | 10,1 | 183 / 187 | 0,327 [0,304 ; 0,358] | 0,395 [0,371 ; 0,418] | 0,246 [0,224 ; 0,285] | 0,400 [0,380 ; 0,418] |
+
+Le fichier `.pt` d'Ultralytics stocke les poids en FP16, d'où sa taille inférieure à l'ONNX FP32.
+
+**Ce que montrent ces mesures** (`results/deploy_comparisons.csv`, `results/deploy_latency_kaggle.csv`) :
+
+- **ONNX FP32 est 25 % plus rapide que PyTorch** (204 contre 272 ms). Écart de précision : −0,005 en mAP@50 sur le test source (non significatif), −0,021 [−0,032 ; −0,011] aux États-Unis. Cet écart mêle l'export et la différence d'entrée (bordure jusqu'à 672 × 672 côté PyTorch, voir le protocole) ; ces deux effets ne sont pas séparés.
+- **L'INT8 divise la taille par 3,8 mais n'accélère que de 10 %** (183 contre 204 ms).
+- **Et il coûte cher en précision, surtout hors domaine** : INT8 − ONNX FP32 = −0,036 [−0,049 ; −0,024] en mAP@50 sur le test source, mais −0,145 [−0,188 ; −0,102] aux États-Unis (F1 : −0,028 et −0,075). Le faïençage (D20) aux États-Unis passe de 0,470 à 0,267. Le modèle INT8 perd aussi la robustesse au changement de pays : États-Unis − test source = −0,081 [−0,117 ; −0,037], contre +0,028 (non significatif) en FP32.
+- **Sur ce CPU, la version à déployer est l'ONNX FP32.** Avec cette configuration, l'INT8 ne vaut pas sa perte de précision.
+- Deux causes possibles de la perte aux États-Unis, **non testées** : la quantification de la tête de détection et de la convolution DFL (voir la correction du protocole), et une calibration faite uniquement sur des images sources.
+
 ## Reproduire
 
 ```bash
@@ -152,7 +195,10 @@ python -m roadshift.deploy.bench --models yolo11s_s1.pt yolo11s_s1_fp32.onnx yol
 - **Recette de RT-DETR-l modifiée après un incident** : avec le lr « auto » d'Ultralytics (0,00125) en AMP, l'entraînement a divergé (NaN dès l'epoch 6, arrêt après 5 h 43) ; relancé avec le lr de sa recette d'origine (1e-4), sans NaN. Les deux runs n'ont donc pas exactement le même commit (seule la ligne RT-DETR de la config diffère).
 - **Petits effectifs par classe** : 2 boîtes D10 dans le test Inde (son mAP@50 est très instable : IC de l'écart entre modèles [−0,137 ; +0,267]) et 23 boîtes D40 dans le test États-Unis. Les AP par classe de ces cas ne sont pas interprétables.
 - **Q1, deux recettes seulement** : cible seule et rejeu 1:1, avec 30 epochs et lr / 10 ; d'autres ratios de rejeu ou d'autres durées n'ont pas été testés. Le seuil du F1, fixé sur la validation source, peut être mal calibré pour la cible après fine-tuning, ce qui pénalise surtout le F1 sans rejeu.
-- [à compléter avec Q2, Q3]
+- **Q2, le niveau « net » n'a ni bruit ni réenregistrement JPEG** : la chute entre « net » et 9 px mêle le flou et ces deux dégradations légères.
+- **Q2, augmentation contre Wiener non appariée** : les prédictions image par image n'ont pas été exportées ; seuls les cas où les IC sont disjoints sont retenus, ce qui est prudent mais peut manquer des écarts réels.
+- **Q2, un seul entraînement augmenté** (seed 42), avec Ultralytics 8.4.218 alors que le modèle S1 a été entraîné avec 8.4.216 ; même recette par ailleurs. La combinaison augmentation + Wiener et l'estimation du noyau de flou n'ont pas été testées.
+- **Q3, un seul CPU mesuré** (Kaggle, Xeon 2,20 GHz) : le gain de vitesse de l'INT8 dépend des instructions du processeur. Une seule configuration INT8 (toutes les convolutions, calibration MinMax sur des images sources).
 
 ## Licences
 
