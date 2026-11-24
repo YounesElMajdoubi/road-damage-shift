@@ -62,6 +62,24 @@ Valeurs mesurées, IC à 95 % par bootstrap sur les images de test (1 000 tirage
 
 Validation de l'évaluation : avec la même formule d'AP, le module `roadshift.eval` reproduit les mAP@50 d'Ultralytics à 0,0012 près sur les 20 évaluations ; les IC calculés sur Kaggle et recalculés hors Kaggle sont identiques.
 
+### Variance d'entraînement : YOLO11s avec 3 seeds
+
+Même recette, seule la graine d'entraînement change (42, 1, 2). Dernières colonnes : écart apparié avec RT-DETR-l (un seul seed) sur le test États-Unis. Sources : `results/ci_yolo11s*.csv`, `results/comparisons_s1_seeds.csv`.
+
+| Seed | Seuil F1 | Test source mAP@50 | Test source F1 | États-Unis mAP@50 | États-Unis F1 | − RT-DETR-l, États-Unis mAP@50 | − RT-DETR-l, États-Unis F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 42 | 0,18 | 0,368 [0,347 ; 0,399] | 0,428 [0,405 ; 0,452] | 0,412 [0,368 ; 0,468] | 0,497 [0,479 ; 0,513] | +0,100 [+0,058 ; +0,143] | +0,081 [+0,062 ; +0,100] |
+| 1 | 0,16 | 0,356 [0,334 ; 0,387] | 0,423 [0,401 ; 0,445] | 0,383 [0,346 ; 0,434] | 0,470 [0,453 ; 0,486] | +0,071 [+0,029 ; +0,109] | +0,054 [+0,035 ; +0,073] |
+| 2 | 0,21 | 0,359 [0,337 ; 0,391] | 0,432 [0,409 ; 0,456] | 0,399 [0,358 ; 0,457] | 0,493 [0,474 ; 0,511] | +0,086 [+0,051 ; +0,126] | +0,077 [+0,058 ; +0,097] |
+
+**Ce que montrent ces mesures** :
+
+- **En domaine, le seed ne change rien de mesurable** : aucun des 3 écarts appariés entre seeds n'est significatif, ni sur le test source ni sur chacun des 3 pays sources.
+- **Sur les États-Unis, le seed compte** : mAP@50 de 0,383 à 0,412, F1 de 0,470 à 0,497. L'écart seed 42 − seed 1 est significatif (+0,029 [+0,004 ; +0,056] en mAP@50, +0,027 [+0,014 ; +0,041] en F1), de même que seed 1 − seed 2 en F1 (−0,023 [−0,038 ; −0,009]). Les IC bootstrap, qui ne couvrent que l'aléa de l'échantillon de test, sous-estiment donc l'incertitude d'un run isolé sur le pays cible : un écart d'environ 0,03 entre deux runs uniques peut venir du seul seed.
+- **L'avantage de YOLO11s sur RT-DETR-l aux États-Unis tient pour les 3 seeds** (+0,071 à +0,100 en mAP@50, +0,054 à +0,081 en F1, tous significatifs), et le plus petit écart dépasse l'étendue entre seeds de YOLO11s (0,029). La variance de RT-DETR-l, lui, n'est pas mesurée.
+- **La hausse du F1 aux États-Unis par rapport au test source se retrouve avec les 3 seeds** (+0,047 à +0,069, toutes significatives) ; en mAP@50, elle n'est significative pour aucun.
+- **Le seed 42, point de départ de Q1, Q2 et Q3, est le meilleur des trois sur les États-Unis.** Les gains de Q1 restent cohérents (appariés avec ce même modèle), mais son niveau absolu (0,412) est en haut de la fourchette.
+
 ## Résultats Q1 : adapter YOLO11s aux États-Unis avec k images annotées
 
 Fine-tuning du modèle S1 sur les seules images cibles (protocole ci-dessus). Point de départ k = 0 : mAP@50 0,412 sur le test États-Unis. Gains = différence appariée avec k = 0 sur les mêmes images de test (IC 95 % bootstrap) ; pour 50, 200 et 500, étendue sur les 3 tirages d'images et, entre parenthèses, nombre de tirages où l'écart est significatif, **dans un sens ou dans l'autre** (un écart négatif est une perte). Coût d'annotation **estimé** (modèle publié), pas mesuré.
@@ -83,8 +101,6 @@ Fine-tuning du modèle S1 sur les seules images cibles (protocole ci-dessus). Po
 - **200 images** : gains de mAP@50 positifs mais non significatifs sur les 3 tirages.
 - **Gain significatif à partir de 500 images** (≈ 3 à 12 h d'annotation estimées), sur les 3 tirages, d'environ +0,04 de mAP@50 ; la réserve complète (≈ 10 à 36 h) donne le gain le plus net.
 - **Oubli massif** : dès 50 images, le fine-tuning sur la seule cible fait perdre ≈ 0,09 à 0,14 de mAP@50 sur les pays sources, de façon significative dans tous les runs. Adapter ainsi le modèle à un nouveau pays le casse pour les anciens.
-
-Variance d'entraînement du modèle S1 (YOLO11s, seeds 42 et 2, `results/comparisons_s1_seeds.csv`) : écart non significatif entre seeds (+0,013 [-0,013 ; +0,040] en mAP@50 sur les États-Unis), bien inférieur à l'avantage de YOLO11s sur RT-DETR-l, qui tient avec le seed 2 (+0,086 [+0,051 ; +0,126]).
 
 ## Résultats Q1 (suite) : le rejeu d'images sources contre l'oubli (S2b)
 
@@ -130,7 +146,8 @@ python -m roadshift.deploy.bench --models yolo11s_s1.pt yolo11s_s1_fp32.onnx yol
 - Les métadonnées de trajet (GPS, séquence) ne sont pas publiées : le découpage par blocs réduit la fuite sans la garantir.
 - Le sous-ensemble États-Unis de RDD2022 ne contient **aucune image sans dégât** (0 / 4 805 XML sans objet, contre 8 % au Japon, 51 % en Inde et 62 % en Tchéquie). Les fausses alertes sur route saine ne sont donc pas mesurables sur le pays cible ; chaque test source est aussi évalué restreint aux images avec au moins un dégât (`*_pos`) pour une comparaison à conditions égales.
 - Distribution des classes très différente entre pays (ex. 23 nids-de-poule D40 seulement dans le test États-Unis) : les métriques par classe sur le pays cible sont rapportées avec leur intervalle de confiance.
-- **Variance d'entraînement partiellement mesurée** : YOLO11s a 2 seeds (42 et 2), RT-DETR-l un seul (≈ 6 h de GPU par run). Les IC bootstrap couvrent l'aléa de l'échantillon de test, pas celui de l'entraînement.
+- **Variance d'entraînement partiellement mesurée** : YOLO11s a 3 seeds (42, 1 et 2), RT-DETR-l un seul (≈ 6 h de GPU par run). Les IC bootstrap couvrent l'aléa de l'échantillon de test, pas celui de l'entraînement ; or, sur les États-Unis, deux seeds de YOLO11s diffèrent déjà significativement (≈ 0,03 de mAP@50).
+- **Q1, graine de fine-tuning unique** : la variance mesurée vient du choix des images, pas de l'entraînement. Vu l'écart entre seeds en S1 (≈ 0,03 sur les États-Unis), les gains de k = 200 (+0,02 à +0,04) ne se distinguent pas d'un effet de seed, et celui de k = 500 (≈ +0,04 à +0,05) n'en est que modérément au-dessus.
 - **Même budget, pas l'optimum de chaque modèle** : à 50 epochs, la validation de YOLO11s progresse encore (meilleur epoch = 50) alors que RT-DETR-l plafonne (meilleur epoch = 47).
 - **Recette de RT-DETR-l modifiée après un incident** : avec le lr « auto » d'Ultralytics (0,00125) en AMP, l'entraînement a divergé (NaN dès l'epoch 6, arrêt après 5 h 43) ; relancé avec le lr de sa recette d'origine (1e-4), sans NaN. Les deux runs n'ont donc pas exactement le même commit (seule la ligne RT-DETR de la config diffère).
 - **Petits effectifs par classe** : 2 boîtes D10 dans le test Inde (son mAP@50 est très instable : IC de l'écart entre modèles [−0,137 ; +0,267]) et 23 boîtes D40 dans le test États-Unis. Les AP par classe de ces cas ne sont pas interprétables.

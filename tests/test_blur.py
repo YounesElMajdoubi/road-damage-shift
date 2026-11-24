@@ -70,7 +70,7 @@ def _stem(line):
 
 def _ultra_label(img: Path) -> Path:
     """Règle d'Ultralytics : remplacer le dernier /images/ par /labels/ et l'extension par .txt."""
-    head, tail = str(img).rsplit("/images/", 1)
+    head, tail = img.as_posix().rsplit("/images/", 1)  # as_posix : séparateurs "/" aussi sous Windows
     return Path(f"{head}/labels/{tail}").with_suffix(".txt")
 
 
