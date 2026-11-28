@@ -22,18 +22,21 @@ from roadshift.eval.report import build_table
 METRICS = ("mAP50", "F1")
 
 
-def compare(runs: dict[str, Path], data: Path, tags: list[str], target: str, n_boot: int = 1000, seed: int = 0):
+def compare(runs: dict[str, Path], data: Path, tags: list[str], target: str, n_boot: int = 1000, seed: int = 0,
+            agnostic: bool = False, pairs: list[tuple[str, str]] | None = None):  # fmt: skip
+    """pairs : comparaisons appariées à calculer (défaut : toutes les paires)."""
     sizes = load_sizes(data / "manifest.csv")
-    conf = {m: best_f1_threshold(build_table(d, data, "source_val", sizes)) for m, d in runs.items()}
-    tables = {(m, t): build_table(d, data, t, sizes) for m, d in runs.items() for t in tags}
+    conf = {m: best_f1_threshold(build_table(d, data, "source_val", sizes, agnostic)) for m, d in runs.items()}
+    tables = {(m, t): build_table(d, data, t, sizes, agnostic) for m, d in runs.items() for t in tags}
     rows = []
 
     def add(kind, ev, metric, a, b, res):
         p, lo, hi = res
-        rows.append({"comparison": kind, "eval": ev, "metric": metric, "a": a, "b": b, "diff": round(p, 4),
-                     "lo": round(lo, 4), "hi": round(hi, 4), "significant": lo > 0 or hi < 0})  # fmt: skip
+        rows.append({"comparison": kind, "agnostic": agnostic, "eval": ev, "metric": metric, "a": a, "b": b,
+                     "diff": round(p, 4), "lo": round(lo, 4), "hi": round(hi, 4),
+                     "significant": lo > 0 or hi < 0})  # fmt: skip
 
-    for ma, mb in combinations(runs, 2):
+    for ma, mb in pairs or list(combinations(runs, 2)):
         for t in tags:
             for met in METRICS:
                 r = paired_bootstrap_diff(tables[(ma, t)], tables[(mb, t)], conf[ma], conf[mb], met, n_boot, seed)
@@ -54,11 +57,12 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--agnostic", action="store_true", help="une seule classe « dégradation »")
     args = ap.parse_args(argv)
     runs = dict(r.split("=", 1) for r in args.run)
     runs = {k: Path(v) for k, v in runs.items()}
     tags = list(dict.fromkeys([*args.tags, args.target]))
-    rows = compare(runs, args.data, tags, args.target, args.n_boot, args.seed)
+    rows = compare(runs, args.data, tags, args.target, args.n_boot, args.seed, args.agnostic)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w", newline="\n", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))

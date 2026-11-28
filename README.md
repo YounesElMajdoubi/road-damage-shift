@@ -53,6 +53,15 @@ Décidé **après** les résultats de Q3 (perte INT8 de −0,145 aux États-Unis
 - Le reste est identique à Q3. La variante « tête quantifiée, calibration source » reproduit Q3 et sert de contrôle.
 - Référence : ONNX FP32 (même entrée 640 × 640), écarts appariés avec IC 95 % ; latence et taille de chaque variante.
 
+### Protocole S4 : référence zero-shot (fixé avant les résultats)
+
+- Deux détecteurs à vocabulaire ouvert, **sans aucun entraînement** sur RDD2022 : Grounding DINO base (`IDEA-Research/grounding-dino-base`) et Florence-2 large (`florence-community/Florence-2-large`, tâche `<OPEN_VOCABULARY_DETECTION>`). Révision exacte des poids enregistrée dans MLflow.
+- Une phrase anglaise par classe, fixée avant tout résultat et jamais ajustée sur un test : `longitudinal crack` (D00), `transverse crack` (D10), `alligator crack` (D20), `pothole` (D40).
+- Grounding DINO : score d'une classe = moyenne des probabilités des tokens de sa phrase (méthode d'évaluation COCO du modèle) ; une classe par boîte (la meilleure), 300 boîtes au plus par image (= `max_det` d'Ultralytics), score ≥ 0,01.
+- Florence-2 ne donne pas de score par boîte : chaque boîte reçoit le score de la séquence générée (une génération par image et par classe, recherche en faisceau à 3). Le classement entre boîtes d'une même génération est donc arbitraire, ce qui pénalise son mAP ; son F1 est la lecture la plus juste.
+- Mêmes images que YOLO11s (S1, seed 42, réévalué dans le même notebook : contrôle), même seuil du F1 choisi sur la validation source de chaque modèle, écarts appariés avec IC 95 %.
+- Deux lectures : **par classe** (protocole habituel) et **« dégradation », toutes classes confondues** (une seule classe, NMS entre classes à IoU 0,7, appliquée de la même façon aux trois modèles), pour séparer « trouver le dégât » de « reconnaître son type ».
+
 ## Résultats S1 : baselines (Japon + Inde + Tchéquie → test source et États-Unis jamais vus)
 
 Valeurs mesurées, IC à 95 % par bootstrap sur les images de test (1 000 tirages). mAP@50 au sens COCO ; F1 micro « CRDDC » (IoU ≥ 0,5, classe correcte) au seuil de confiance choisi sur la validation source (YOLO11s 0,18 ; RT-DETR-l 0,44). mAP@50-95 : valeur Ultralytics, sans IC.
@@ -173,6 +182,27 @@ Le fichier `.pt` d'Ultralytics stocke les poids en FP16, d'où sa taille inféri
 - **Sur ce CPU, la version à déployer est l'ONNX FP32.** Avec cette configuration, l'INT8 ne vaut pas sa perte de précision.
 - Deux causes possibles de la perte aux États-Unis, **non testées** : la quantification de la tête de détection et de la convolution DFL (voir la correction du protocole), et une calibration faite uniquement sur des images sources.
 
+## Résultats Q3b : variantes INT8 (exploratoire)
+
+Même CPU Kaggle, mêmes réglages qu'en Q3 ; référence : ONNX FP32. Sources : `results/q3b_*.csv`.
+
+| Variante | Tête | Calibration | Taille (Mo) | Latence médiane (ms) | mAP@50 test source | mAP@50 États-Unis | INT8 − FP32, États-Unis mAP@50 |
+|---|---|---|---:|---:|---:|---:|---:|
+| ONNX FP32 | — | — | 37,9 | 197 | 0,363 | 0,391 | — |
+| `int8_all_src` (= Q3) | INT8 | 200 sources | 10,1 | 182 | 0,327 | 0,246 | −0,145 [−0,188 ; −0,102] |
+| `int8_nohead_src` | FP32 | 200 sources | 12,5 | 204 | 0,329 | 0,250 | −0,142 [−0,185 ; −0,097] |
+| `int8_all_mix` | INT8 | 100 sources + 100 US | 10,1 | 182 | 0,326 | 0,247 | −0,145 [−0,191 ; −0,103] |
+| `int8_nohead_mix` | FP32 | 100 sources + 100 US | 12,5 | 200 | 0,328 | 0,250 | −0,141 [−0,185 ; −0,098] |
+
+**Ce que montrent ces mesures** :
+
+- **Le contrôle reproduit Q3 à l'identique** (mêmes scores et mêmes écarts appariés) : la quantification et l'évaluation sont déterministes.
+- **Aucune des deux pistes ne sauve l'INT8.** Les 6 comparaisons appariées entre variantes INT8 sont non significatives, sur les deux jeux, avec des écarts d'au plus 0,004 en mAP@50 et 0,006 en F1. Les quatre variantes perdent toutes environ −0,035 sur le test source et −0,14 aux États-Unis.
+- **La perte vient donc d'ailleurs** : ni de la tête de détection, ni du domaine des images de calibration (dans cette configuration : calibration MinMax, 200 images). Le reste du réseau est quantifié dans toutes les variantes, et les nids-de-poule (D40) aux États-Unis tombent de 0,213 à environ 0,06 dans les quatre cas.
+- **Garder la tête en FP32 supprime tout gain de vitesse** (200 à 204 ms, contre 197 en FP32) et ajoute 2,4 Mo.
+- **La conclusion de Q3 tient** : sur ce CPU, la version à déployer est l'ONNX FP32. Pistes non testées : calibration par percentile ou entropie, analyse couche par couche de la sensibilité à la quantification, entraînement avec quantification simulée (QAT).
+- La latence FP32 est de 197 ms ici contre 204 ms en Q3 : environ 3 % de variation d'un run à l'autre sur la même machine Kaggle.
+
 ## Reproduire
 
 ```bash
@@ -187,6 +217,7 @@ python -m roadshift.eval.compare --run yolo11s=<run_yolo> --run rtdetr_l=<run_rt
 ```
 Q1 : `notebooks/02_fewshot_kaggle.ipynb` (`MODE = "target_only"` ou `"replay"`), puis `python -m roadshift.fewshot.gains` et `python -m roadshift.fewshot.plot`.
 Q2 : `notebooks/03_blur_kaggle.ipynb` (jeux floutés : `python -m roadshift.blur.build` ; rapport : `python -m roadshift.blur.report`).
+Zero-shot (S4) : `notebooks/06_zeroshot_kaggle.ipynb` (GPU), ou `python -m roadshift.zeroshot.run --model grounding_dino --data <dataset> --out runs_zeroshot/grounding_dino` (extra `zeroshot`), puis `roadshift.eval.report` / `compare` avec `--agnostic` pour la lecture toutes classes confondues.
 Q3 : `notebooks/04_deploy_cpu_kaggle.ipynb` (CPU seul) ; Q3b : `notebooks/05_int8_variants_kaggle.ipynb` ; latence sur une autre machine :
 ```bash
 python -m roadshift.deploy.bench --models yolo11s_s1.pt yolo11s_s1_fp32.onnx yolo11s_s1_int8.onnx --threads <cœurs> --out results/deploy_latency_pc.csv
@@ -206,11 +237,12 @@ python -m roadshift.deploy.bench --models yolo11s_s1.pt yolo11s_s1_fp32.onnx yol
 - **Q2, le niveau « net » n'a ni bruit ni réenregistrement JPEG** : la chute entre « net » et 9 px mêle le flou et ces deux dégradations légères.
 - **Q2, augmentation contre Wiener non appariée** : les prédictions image par image n'ont pas été exportées ; seuls les cas où les IC sont disjoints sont retenus, ce qui est prudent mais peut manquer des écarts réels.
 - **Q2, un seul entraînement augmenté** (seed 42), avec Ultralytics 8.4.218 alors que le modèle S1 a été entraîné avec 8.4.216 ; même recette par ailleurs. La combinaison augmentation + Wiener et l'estimation du noyau de flou n'ont pas été testées.
-- **Q3, un seul CPU mesuré** (Kaggle, Xeon 2,20 GHz) : le gain de vitesse de l'INT8 dépend des instructions du processeur. Une seule configuration INT8 (toutes les convolutions, calibration MinMax sur des images sources).
+- **Q3, un seul CPU mesuré** (Kaggle, Xeon 2,20 GHz) : le gain de vitesse de l'INT8 dépend des instructions du processeur. Quatre configurations INT8 testées (Q3b), toutes avec une calibration MinMax ; percentile, entropie et QAT non testés.
 
 ## Licences
 
 - Code : AGPL-3.0, par cohérence avec **Ultralytics (AGPL-3.0)**, dont ce projet dépend pour YOLO11 et RT-DETR. Un usage commercial fermé nécessiterait une licence Ultralytics Enterprise.
+- Modèles zero-shot (non redistribués, téléchargés depuis Hugging Face) : Grounding DINO (Apache-2.0), Florence-2 (MIT).
 - Données : RDD2022 (Arya et al., 2024), licence **CC BY 4.0**, téléchargées depuis le dépôt figshare officiel (article 21431547, intégrité vérifiée par MD5). Le serveur S3 du challenge n'est plus accessible publiquement.
 
 ## Citation des données

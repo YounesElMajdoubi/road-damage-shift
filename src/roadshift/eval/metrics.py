@@ -71,6 +71,29 @@ def load_predictions(json_path: str | Path, class_offset: int = 1):
     return out
 
 
+def nms(boxes: np.ndarray, scores: np.ndarray, iou_thr: float) -> np.ndarray:
+    """Indices gardés par NMS gloutonne (score décroissant)."""
+    order, keep = np.argsort(-scores, kind="stable"), []
+    while len(order):
+        i, order = order[0], order[1:]
+        keep.append(i)
+        if len(order):
+            order = order[box_iou(boxes[i : i + 1], boxes[order])[0] < iou_thr]
+    return np.array(keep, dtype=int)
+
+
+def to_agnostic(gt: dict, preds: dict, nms_iou: float = 0.7) -> tuple[dict, dict]:
+    """Évaluation « dégradation, toutes classes confondues » : une seule classe, et NMS entre classes sur les
+    prédictions (sinon une même fissure prédite D00 et D10 compterait comme un doublon). Même traitement pour
+    tous les modèles."""
+    g = {s: (np.zeros(len(c), dtype=int), b) for s, (c, b) in gt.items()}
+    p = {}
+    for s, (_c, b, sc) in preds.items():
+        k = nms(b, sc, nms_iou)
+        p[s] = (np.zeros(len(k), dtype=int), b[k], sc[k])
+    return g, p
+
+
 # --------------------------------------------------------------------------- appariement
 def box_iou(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """IoU entre boîtes xyxy : a[n,4], b[m,4] -> [n,m]."""

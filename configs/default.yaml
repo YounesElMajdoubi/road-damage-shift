@@ -132,3 +132,23 @@ deploy:                         # (S3, Q3) protocole fixé avant tout résultat 
     int8_nohead_mix:
       exclude_name_contains: ["/model.23/"]
       calibration: {list_source_train.txt: 100, list_pool_United_States.txt: 100}
+
+zeroshot:
+  # Référence sans entraînement (S4). Une phrase par classe, fixée AVANT tout résultat et jamais ajustée sur un
+  # jeu de test (vocabulaire RDD2022 / CRDDC). Mêmes jeux et même seuil de F1 (choisi sur source_val) que YOLO.
+  prompts: {D00: longitudinal crack, D10: transverse crack, D20: alligator crack, D40: pothole}
+  eval_sets: [source_val, source_test, test_United_States]
+  reference: yolo11s              # poids S1 seed 42, réévalués dans le même notebook (comparaisons appariées)
+  agnostic: true                  # en plus : une seule classe « dégradation », NMS entre classes IoU 0,7
+  models:
+    grounding_dino:               # Apache-2.0 ; score d'une classe = moyenne des probabilités des tokens
+      hf_id: IDEA-Research/grounding-dino-base
+      batch: 4
+      top_k: 300                  # = max_det d'Ultralytics
+      min_score: 0.01
+    florence2:                    # MIT ; pas de score par boîte : score de la séquence générée
+      hf_id: florence-community/Florence-2-large
+      task: "<OPEN_VOCABULARY_DETECTION>"
+      batch: 8
+      num_beams: 3
+      max_new_tokens: 1024
